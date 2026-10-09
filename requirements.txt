@@ -1,5 +1,6 @@
+pyTelegramBotAPI
 aiohttp
-aiohttp-socks
-python-telegram-bot
-requests
-flask
+aiohttp_socks
+opencv-python
+ddddocr
+numpy
