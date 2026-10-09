@@ -335,7 +335,7 @@ class ProxyMgr:
             self.idx += 1; return p
 
     async def bad_mark(self, p):
-        if not p" return
+        if not p: return
         async with self.lock: self.bad.add(p)
 
     @property
