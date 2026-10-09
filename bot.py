@@ -30,8 +30,8 @@ import ddddocr
 import numpy as np
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-BOT_TOKEN = '8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o'
-REPO_OWNER = "repo"
+BOT_TOKEN = '8585973091:AAH4GO9PpvS_F0NmWB0ZtQ8cDXRxroc5p78'
+REPO_OWNER = "oopp41891-ux"
 REPO_NAME = "Lord_of_barkness"
 
 SUCCESS_CODE = asyncio.Queue()
