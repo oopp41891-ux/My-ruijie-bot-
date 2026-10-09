@@ -30,7 +30,7 @@ import ddddocr
 import numpy as np
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-BOT_TOKEN = '8585973091:AAH4GO9PpvS_F0NmWB0ZtQ8cDXRxroc5p78'
+BOT_TOKEN = '8585973091:AAF-dZh1aHYzCiOKEBqLIbuRA_lW_Rs9nEc'
 REPO_OWNER = "oopp41891-ux"
 REPO_NAME = "Lord_of_barkness"
 ADMIN_ID = "8585973091"
