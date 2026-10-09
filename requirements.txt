@@ -1,6 +1,6 @@
 pyTelegramBotAPI
 aiohttp
 aiohttp_socks
-opencv-python
+opencv-python-headless
 ddddocr
 numpy
