@@ -675,11 +675,13 @@ async def start_polling():
     while True:
         try:
             print("[BotDaemon] 24/7 Infinity Polling စတင်နေပါပြီ...")
+            await bot.remove_webhook()  # 👈 while loop ထဲ၊ try block ရဲ့ အစမှာ ရှိရပါမယ်
             await bot.infinity_polling(timeout=30, request_timeout=45, skip_pending=True)
         except Exception as e:
             print(f"[BotDaemon] ချိတ်ဆက်မှုပြတ်တောက်သွားသည်: {e}. {backoff} စက္ကန့်အတွင်း ပြန်ချိတ်ပါမည်...")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
+
 
 async def main():
     global session, _connector
