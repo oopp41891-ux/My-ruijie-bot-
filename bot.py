@@ -358,21 +358,40 @@ async def do_check(session_url, code, chat_id, scan_id=None, recheck=False, mess
         timeout = aiohttp.ClientTimeout(total=REQ_TIMEOUT)
         try:
             async with aiohttp.ClientSession(connector=connector, timeout=timeout, cookie_jar=aiohttp.CookieJar()) as s:
-                if platform == "mikrotik":
-                    parsed = urlparse(session_url)
+                                if platform == "mikrotik":
+                    from urllib.parse import urlparse, parse_qs
+                    
+                    # URL အစမှာ http ပါစေရန် သေချာစေခြင်း
+                    clean_url = session_url.strip()
+                    if not clean_url.lower().startswith("http"):
+                        clean_url = "http://" + clean_url
+
+                    parsed = urlparse(clean_url)
                     base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
                     origin = f"{parsed.scheme}://{parsed.netloc}"
+                    
+                    # URL ထဲက dst ပါလာလျှင် အလိုအလျောက် ဖြုတ်ထုတ်ယူရန်
+                    query_params = parse_qs(parsed.query)
+                    dst_val = query_params.get("dst", ["http://connectivitycheck.gstatic.com/generate_204"])[0]
+
                     headers = {
                         "Content-Type": "application/x-www-form-urlencoded",
-                        "Origin": origin, "Referer": session_url,
+                        "Origin": origin, 
+                        "Referer": clean_url,
                         "User-Agent": random.choice(UAS),
                         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                         "Accept-Language": "en-US,en;q=0.9",
                         "Upgrade-Insecure-Requests": "1",
                     }
-                    data = {"dst": "http://connectivitycheck.gstatic/2Fgenerate_204", "popup": "true", "username": code, "password": ""}
+                    data = {
+                        "dst": dst_val, 
+                        "popup": "true", 
+                        "username": code, 
+                        "password": ""
+                    }
                     async with s.post(base, data=data, headers=headers, ssl=False, allow_redirects=True) as req:
                         response = await req.text()
+
                 else:
                     m = re.search(r"[?&]sessionId=([a-zA-Z0-9]+)", session_url)
                     sid = m.group(1) if m else "default"
