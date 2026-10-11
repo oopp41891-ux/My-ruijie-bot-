@@ -232,7 +232,7 @@ async def on_callback(call):
         elif call.data == "menu_help":
             await bot.edit_message_text("📖 Key → URL ရိုက် → Scan → Stop", chat_id=cid, message_id=mid, parse_mode="Markdown", reply_markup=kb_main())
     except Exception: pass
-    await call.answer()
+    await bot.answer_callback_query(call.id)
 
 # ═══════════════════════════════════════════════════════════════
 #  TEXT HANDLER — URL လက်ခံ
